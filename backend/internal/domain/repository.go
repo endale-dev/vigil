@@ -18,3 +18,9 @@ type SessionRepository interface {
 	DeleteByUserExcept(ctx context.Context, userID, keep ID) error
 	DeleteByUser(ctx context.Context, userID ID) error
 }
+
+type PasswordResetRepository interface {
+	Create(ctx context.Context, reset *PasswordReset) error
+	GetByTokenHash(ctx context.Context, hash string) (*PasswordReset, error)
+	DeleteByUser(ctx context.Context, userID ID) error
+}
