@@ -1,7 +1,11 @@
 package domain
 
 import (
+	"net"
+	"net/url"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -68,6 +72,52 @@ func ValidateSlug(slug string) error {
 		if !((char >= 'a' && char <= 'z') || (char >= '0' && char <= '9') || char == '-') {
 			return ValidationError{Field: "slug", Message: "must be 3 to 40 lowercase letters, numbers, or hyphens without a leading or trailing hyphen"}
 		}
+	}
+	return nil
+}
+
+func (monitor *Monitor) Validate() error {
+	if err := ValidateName(monitor.Name); err != nil {
+		return err
+	}
+	if monitor.Type != MonitorHTTP && monitor.Type != MonitorTCP && monitor.Type != MonitorTLS {
+		return ValidationError{Field: "type", Message: "is invalid"}
+	}
+	if monitor.Status != StatusUnknown && monitor.Status != StatusUp && monitor.Status != StatusDown {
+		return ValidationError{Field: "status", Message: "is invalid"}
+	}
+	if monitor.Interval < 30*time.Second || monitor.Interval > 24*time.Hour {
+		return ValidationError{Field: "interval", Message: "must be between 30 seconds and 24 hours"}
+	}
+	if monitor.Timeout < time.Second || monitor.Timeout > 30*time.Second || monitor.Timeout > monitor.Interval {
+		return ValidationError{Field: "timeout", Message: "must be between 1 and 30 seconds and no greater than the interval"}
+	}
+	switch monitor.Type {
+	case MonitorHTTP:
+		parsed, err := url.Parse(monitor.Target)
+		if err != nil || !parsed.IsAbs() || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil || strings.Contains(monitor.Target, "#") {
+			return ValidationError{Field: "target", Message: "must be an absolute HTTP or HTTPS URL without userinfo or a fragment"}
+		}
+	case MonitorTCP, MonitorTLS:
+		host, portText, err := net.SplitHostPort(monitor.Target)
+		port, portErr := strconv.Atoi(portText)
+		if err != nil || host == "" || portErr != nil || port < 1 || port > 65535 {
+			return ValidationError{Field: "target", Message: "must be a valid host:port with a port from 1 to 65535"}
+		}
+	}
+	if monitor.Type == MonitorHTTP {
+		if monitor.ExpectedStatus != 0 && (monitor.ExpectedStatus < 100 || monitor.ExpectedStatus > 599) {
+			return ValidationError{Field: "expectedStatus", Message: "must be zero or an HTTP status from 100 to 599"}
+		}
+	} else if monitor.ExpectedStatus != 0 {
+		return ValidationError{Field: "expectedStatus", Message: "is only valid for HTTP monitors"}
+	}
+	if monitor.Type == MonitorTLS {
+		if monitor.TLSWarnDays < 1 || monitor.TLSWarnDays > 90 {
+			return ValidationError{Field: "tlsWarnDays", Message: "must be between 1 and 90 for TLS monitors"}
+		}
+	} else if monitor.TLSWarnDays != 0 {
+		return ValidationError{Field: "tlsWarnDays", Message: "is only valid for TLS monitors"}
 	}
 	return nil
 }
