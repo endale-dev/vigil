@@ -46,3 +46,17 @@ type MonitorRepository interface {
 	// RecordResult must only persist the result and release the lease when claimToken matches the active claim.
 	RecordResult(ctx context.Context, id ID, claimToken string, status Status, failures int, checkedAt time.Time) error
 }
+
+type CheckRepository interface {
+	Insert(ctx context.Context, check *Check) error
+	ListByMonitor(ctx context.Context, id ID, limit int) ([]Check, error)
+	UptimeSince(ctx context.Context, id ID, since time.Time) (Uptime, error)
+	DeleteByMonitor(ctx context.Context, id ID) error
+}
+
+type IncidentRepository interface {
+	Open(ctx context.Context, incident *Incident) error
+	Resolve(ctx context.Context, monitor ID, at time.Time) error
+	ListByMonitor(ctx context.Context, id ID, limit int) ([]Incident, error)
+	DeleteByMonitor(ctx context.Context, id ID) error
+}
