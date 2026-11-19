@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/endale-dev/vigil/internal/config"
-	"github.com/endale-dev/vigil/internal/server"
+	"github.com/endale-dev/vigil/backend/internal/config"
+	"github.com/endale-dev/vigil/backend/internal/server"
 )
 
 func Run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {

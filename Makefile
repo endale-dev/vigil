@@ -3,7 +3,7 @@ NPM ?= npm
 DOCKER ?= docker
 STATICCHECK_VERSION ?= 2026.2.2
 DEADCODE_VERSION ?= v0.50.0
-GO_SOURCES := $(wildcard cmd/vigil/*.go internal/*/*.go internal/*/*/*.go internal/*/*/*/*.go)
+GO_SOURCES := $(wildcard backend/*.go backend/internal/*/*.go backend/internal/*/*/*.go backend/internal/*/*/*/*.go)
 
 .PHONY: test build run lint deadcode check web docker
 
@@ -12,18 +12,18 @@ test:
 	$(GO) test -race ./...
 
 build:
-	$(if $(wildcard cmd/vigil/main.go),,$(error cmd/vigil/main.go is missing; the application entry point has not been added yet))
+	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; the application entry point has not been added yet))
 ifeq ($(OS),Windows_NT)
 	@if not exist bin mkdir bin
-	$(GO) build -o bin/vigil.exe ./cmd/vigil
+	$(GO) build -o bin/vigil.exe ./backend
 else
 	@mkdir -p bin
-	$(GO) build -o bin/vigil ./cmd/vigil
+	$(GO) build -o bin/vigil ./backend
 endif
 
 run:
-	$(if $(wildcard cmd/vigil/main.go),,$(error cmd/vigil/main.go is missing; the application entry point has not been added yet))
-	$(GO) run ./cmd/vigil
+	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; the application entry point has not been added yet))
+	$(GO) run ./backend
 
 lint:
 	$(if $(GO_SOURCES),,$(error No Go source files exist yet; add a Go package before linting))
@@ -31,16 +31,16 @@ lint:
 	$(GO) run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
 
 deadcode:
-	$(if $(wildcard cmd/vigil/main.go),,$(error cmd/vigil/main.go is missing; dead-code analysis needs an executable package))
+	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; dead-code analysis needs an executable package))
 	$(GO) run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION) -test ./...
 
 check: test build lint deadcode web
 
 web:
-	$(if $(wildcard web/package.json),,$(error web/package.json is missing; the frontend has not been initialized yet))
-	$(NPM) --prefix web ci
-	$(NPM) --prefix web run typecheck
-	$(NPM) --prefix web run build
+	$(if $(wildcard frontend/package.json),,$(error frontend/package.json is missing; the frontend has not been initialized yet))
+	$(NPM) --prefix frontend ci
+	$(NPM) --prefix frontend run typecheck
+	$(NPM) --prefix frontend run build
 
 docker:
 	$(if $(wildcard Dockerfile),,$(error Dockerfile is missing; container packaging has not been added yet))

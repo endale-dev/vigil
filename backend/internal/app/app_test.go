@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/endale-dev/vigil/internal/config"
+	"github.com/endale-dev/vigil/backend/internal/config"
 )
 
 func TestRunStopsAfterCancellation(t *testing.T) {
