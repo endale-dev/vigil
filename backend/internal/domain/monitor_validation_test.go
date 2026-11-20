@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 )
 
 func validMonitor() Monitor {
@@ -86,7 +88,7 @@ func TestMonitorValidateRejectsInvalidValues(t *testing.T) {
 			monitor := validMonitor()
 			tt.edit(&monitor)
 			err := (&monitor).Validate()
-			validationErr, ok := err.(ValidationError)
+			validationErr, ok := err.(apperrors.ValidationError)
 			if !ok || validationErr.Field != tt.field {
 				t.Fatalf("Validate() error = %#v, want ValidationError for %q", err, tt.field)
 			}

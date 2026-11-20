@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/endale-dev/vigil/internal/domain"
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -17,7 +18,7 @@ func TestIDConversion(t *testing.T) {
 	if got := objectIDToID(objectID); got != domain.ID(hexID) {
 		t.Fatalf("objectIDToID() = %q, want %q", got, hexID)
 	}
-	if _, err := idToObjectID("invalid"); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := idToObjectID("invalid"); !errors.Is(err, apperrors.ErrNotFound) {
 		t.Fatalf("idToObjectID() error = %v, want ErrNotFound", err)
 	}
 }
@@ -29,9 +30,9 @@ func TestMapError(t *testing.T) {
 		want error
 	}{
 		{name: "nil", err: nil},
-		{name: "no documents", err: driver.ErrNoDocuments, want: domain.ErrNotFound},
-		{name: "email duplicate", err: driver.WriteException{WriteErrors: driver.WriteErrors{{Code: 11000, Message: "duplicate key index: users_email_unique"}}}, want: domain.ErrEmailTaken},
-		{name: "slug duplicate", err: driver.WriteException{WriteErrors: driver.WriteErrors{{Code: 11000, Message: "duplicate key index: users_status_slug_unique"}}}, want: domain.ErrSlugTaken},
+		{name: "no documents", err: driver.ErrNoDocuments, want: apperrors.ErrNotFound},
+		{name: "email duplicate", err: driver.WriteException{WriteErrors: driver.WriteErrors{{Code: 11000, Message: "duplicate key index: users_email_unique"}}}, want: apperrors.ErrEmailTaken},
+		{name: "slug duplicate", err: driver.WriteException{WriteErrors: driver.WriteErrors{{Code: 11000, Message: "duplicate key index: users_status_slug_unique"}}}, want: apperrors.ErrSlugTaken},
 		{name: "unrelated duplicate", err: driver.WriteException{WriteErrors: driver.WriteErrors{{Code: 11000, Message: "duplicate key index: monitors_owner"}}}},
 		{name: "unknown error", err: errors.New("private driver details")},
 	}
@@ -43,7 +44,7 @@ func TestMapError(t *testing.T) {
 					t.Fatalf("mapError(nil) = %v", got)
 				}
 				if tt.err != nil {
-					if got == nil || errors.Is(got, domain.ErrEmailTaken) || errors.Is(got, domain.ErrSlugTaken) {
+					if got == nil || errors.Is(got, apperrors.ErrEmailTaken) || errors.Is(got, apperrors.ErrSlugTaken) {
 						t.Fatalf("unmapped error = %v", got)
 					}
 					if got.Error() == tt.err.Error() {

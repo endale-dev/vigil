@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/endale-dev/vigil/internal/domain"
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -23,7 +24,7 @@ func (err operationError) Unwrap() error {
 func idToObjectID(id domain.ID) (bson.ObjectID, error) {
 	objectID, err := bson.ObjectIDFromHex(string(id))
 	if err != nil {
-		return bson.NilObjectID, domain.ErrNotFound
+		return bson.NilObjectID, apperrors.ErrNotFound
 	}
 	return objectID, nil
 }
@@ -37,16 +38,16 @@ func mapError(err error) error {
 		return nil
 	}
 	if errors.Is(err, driver.ErrNoDocuments) {
-		return domain.ErrNotFound
+		return apperrors.ErrNotFound
 	}
 	if driver.IsDuplicateKeyError(err) {
 		var serverError driver.ServerError
 		if errors.As(err, &serverError) {
 			switch {
 			case serverError.HasErrorMessage("users_email_unique"):
-				return domain.ErrEmailTaken
+				return apperrors.ErrEmailTaken
 			case serverError.HasErrorMessage("users_status_slug_unique"):
-				return domain.ErrSlugTaken
+				return apperrors.ErrSlugTaken
 			}
 		}
 	}

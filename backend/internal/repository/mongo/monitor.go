@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/endale-dev/vigil/internal/domain"
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -127,7 +128,7 @@ func (repository *monitorRepository) Update(ctx context.Context, monitor *domain
 		return mapError(err)
 	}
 	if result.MatchedCount == 0 {
-		return domain.ErrNotFound
+		return apperrors.ErrNotFound
 	}
 	return nil
 }
@@ -142,7 +143,7 @@ func (repository *monitorRepository) Delete(ctx context.Context, id domain.ID) e
 		return mapError(err)
 	}
 	if result.DeletedCount == 0 {
-		return domain.ErrNotFound
+		return apperrors.ErrNotFound
 	}
 	return nil
 }
@@ -205,7 +206,7 @@ func (repository *monitorRepository) RecordResult(ctx context.Context, id domain
 		if err := repository.collection.FindOne(ctx, bson.D{{Key: "_id", Value: objectID}}).Decode(&document); err != nil {
 			return mapError(err)
 		}
-		return domain.ErrInvalidToken
+		return apperrors.ErrInvalidToken
 	}
 	return nil
 }

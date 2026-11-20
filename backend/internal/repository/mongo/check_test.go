@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/endale-dev/vigil/internal/domain"
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
@@ -33,7 +34,7 @@ func TestCheckDocumentRoundTrip(t *testing.T) {
 
 func TestCheckToDocumentRejectsInvalidMonitorID(t *testing.T) {
 	_, err := checkToDocument(&domain.Check{ID: domain.ID(bson.NewObjectID().Hex()), MonitorID: "invalid"})
-	if err != domain.ErrNotFound {
-		t.Fatalf("checkToDocument() error = %v, want %v", err, domain.ErrNotFound)
+	if err != apperrors.ErrNotFound {
+		t.Fatalf("checkToDocument() error = %v, want %v", err, apperrors.ErrNotFound)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/endale-dev/vigil/internal/domain"
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	driver "go.mongodb.org/mongo-driver/v2/mongo"
 )
@@ -81,7 +82,7 @@ func (repository *userRepository) Update(ctx context.Context, user *domain.User)
 		return mapError(err)
 	}
 	if result.MatchedCount == 0 {
-		return domain.ErrNotFound
+		return apperrors.ErrNotFound
 	}
 	return nil
 }
