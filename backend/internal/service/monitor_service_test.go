@@ -284,14 +284,51 @@ func TestMonitorServicePauseAndResume(t *testing.T) {
 	}
 }
 
+func TestMonitorServiceBoundsCheckAndIncidentHistory(t *testing.T) {
+	monitor := domain.Monitor{ID: "monitor-1", OwnerID: "owner-1"}
+	monitorsRepository := &memoryMonitors{items: map[domain.ID]domain.Monitor{monitor.ID: monitor}}
+	checks := &memoryChecks{}
+	incidents := &memoryIncidents{}
+	monitors, err := NewMonitorService(monitorsRepository, checks, incidents, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		input, wantChecks, wantIncidents int
+	}{
+		{input: 0, wantChecks: 50, wantIncidents: 20},
+		{input: -5, wantChecks: 50, wantIncidents: 20},
+		{input: 300, wantChecks: 200, wantIncidents: 50},
+		{input: 7, wantChecks: 7, wantIncidents: 7},
+	} {
+		if _, err := monitors.ListChecks(context.Background(), "owner-1", monitor.ID, test.input); err != nil {
+			t.Fatalf("ListChecks(limit=%d) error = %v", test.input, err)
+		}
+		if _, err := monitors.ListIncidents(context.Background(), "owner-1", monitor.ID, test.input); err != nil {
+			t.Fatalf("ListIncidents(limit=%d) error = %v", test.input, err)
+		}
+		if checks.lastLimit != test.wantChecks || incidents.lastLimit != test.wantIncidents {
+			t.Fatalf("limits for input %d = %d/%d, want %d/%d", test.input, checks.lastLimit, incidents.lastLimit, test.wantChecks, test.wantIncidents)
+		}
+	}
+	if _, err := monitors.ListChecks(context.Background(), "owner-2", monitor.ID, 10); err != apperrors.ErrNotFound {
+		t.Fatalf("ListChecks(other owner) error = %v, want ErrNotFound", err)
+	}
+	if _, err := monitors.ListIncidents(context.Background(), "owner-2", monitor.ID, 10); err != apperrors.ErrNotFound {
+		t.Fatalf("ListIncidents(other owner) error = %v, want ErrNotFound", err)
+	}
+}
+
 type memoryChecks struct {
-	deleted []domain.ID
-	err     error
+	deleted   []domain.ID
+	lastLimit int
+	err       error
 }
 
 func (*memoryChecks) Insert(context.Context, *domain.Check) error { return nil }
 
-func (*memoryChecks) ListByMonitor(context.Context, domain.ID, int) ([]domain.Check, error) {
+func (repository *memoryChecks) ListByMonitor(_ context.Context, _ domain.ID, limit int) ([]domain.Check, error) {
+	repository.lastLimit = limit
 	return nil, nil
 }
 
@@ -308,15 +345,17 @@ func (repository *memoryChecks) DeleteByMonitor(_ context.Context, id domain.ID)
 }
 
 type memoryIncidents struct {
-	deleted []domain.ID
-	err     error
+	deleted   []domain.ID
+	lastLimit int
+	err       error
 }
 
 func (*memoryIncidents) Open(context.Context, *domain.Incident) error { return nil }
 
 func (*memoryIncidents) Resolve(context.Context, domain.ID, time.Time) error { return nil }
 
-func (*memoryIncidents) ListByMonitor(context.Context, domain.ID, int) ([]domain.Incident, error) {
+func (repository *memoryIncidents) ListByMonitor(_ context.Context, _ domain.ID, limit int) ([]domain.Incident, error) {
+	repository.lastLimit = limit
 	return nil, nil
 }
 

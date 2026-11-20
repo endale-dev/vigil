@@ -138,3 +138,27 @@ func (monitors *MonitorService) Resume(ctx context.Context, ownerID, monitorID d
 	monitor.NextCheckAt = monitors.clock.Now()
 	return monitors.monitors.Update(ctx, monitor)
 }
+
+func (monitors *MonitorService) ListChecks(ctx context.Context, ownerID, monitorID domain.ID, limit int) ([]domain.Check, error) {
+	if _, err := monitors.Get(ctx, ownerID, monitorID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 50
+	} else if limit > 200 {
+		limit = 200
+	}
+	return monitors.checks.ListByMonitor(ctx, monitorID, limit)
+}
+
+func (monitors *MonitorService) ListIncidents(ctx context.Context, ownerID, monitorID domain.ID, limit int) ([]domain.Incident, error) {
+	if _, err := monitors.Get(ctx, ownerID, monitorID); err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 50 {
+		limit = 50
+	}
+	return monitors.incidents.ListByMonitor(ctx, monitorID, limit)
+}
