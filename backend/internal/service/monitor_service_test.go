@@ -319,10 +319,78 @@ func TestMonitorServiceBoundsCheckAndIncidentHistory(t *testing.T) {
 	}
 }
 
+func TestMonitorServiceCalculatesUptimeForThreePeriods(t *testing.T) {
+	now := time.Date(2026, time.October, 11, 12, 13, 14, 0, time.UTC)
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1"},
+	}}
+	checks := &memoryChecks{uptimeResults: []domain.Uptime{{Up: 18, Total: 20}, {Up: 60, Total: 70}, {Up: 250, Total: 300}}}
+	monitors, err := NewMonitorService(repository, checks, &memoryIncidents{}, &fixedServiceClock{now: now}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uptime, err := monitors.Uptime(context.Background(), "owner-1", "monitor-1")
+	if err != nil {
+		t.Fatalf("Uptime() error = %v", err)
+	}
+	for index, summary := range []UptimeSummary{uptime.Last24Hours, uptime.Last7Days, uptime.Last30Days} {
+		want := []float64{0.9, 60.0 / 70.0, 250.0 / 300.0}[index]
+		if summary.Ratio == nil || *summary.Ratio != want {
+			t.Errorf("uptime period %d ratio = %v, want %v", index, summary.Ratio, want)
+		}
+	}
+	wantSince := []time.Time{now.Add(-24 * time.Hour), now.Add(-7 * 24 * time.Hour), now.Add(-30 * 24 * time.Hour)}
+	if len(checks.uptimeSince) != len(wantSince) {
+		t.Fatalf("uptime queries = %d, want %d", len(checks.uptimeSince), len(wantSince))
+	}
+	for index := range wantSince {
+		if !checks.uptimeSince[index].Equal(wantSince[index]) {
+			t.Errorf("uptime query %d since = %s, want %s", index, checks.uptimeSince[index], wantSince[index])
+		}
+	}
+}
+
+func TestMonitorServiceReturnsNullUptimeRatiosForEmptyHistory(t *testing.T) {
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1"},
+	}}
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uptime, err := monitors.Uptime(context.Background(), "owner-1", "monitor-1")
+	if err != nil {
+		t.Fatalf("Uptime() error = %v", err)
+	}
+	for _, summary := range []UptimeSummary{uptime.Last24Hours, uptime.Last7Days, uptime.Last30Days} {
+		if summary.Total != 0 || summary.Ratio != nil {
+			t.Errorf("empty uptime summary = %+v, want null ratio", summary)
+		}
+	}
+}
+
+func TestMonitorServicePropagatesUptimeErrors(t *testing.T) {
+	want := errors.New("uptime query failed")
+	checks := &memoryChecks{uptimeErr: want}
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1"},
+	}}
+	monitors, err := NewMonitorService(repository, checks, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := monitors.Uptime(context.Background(), "owner-1", "monitor-1"); !errors.Is(err, want) {
+		t.Fatalf("Uptime() error = %v, want %v", err, want)
+	}
+}
+
 type memoryChecks struct {
-	deleted   []domain.ID
-	lastLimit int
-	err       error
+	deleted       []domain.ID
+	lastLimit     int
+	err           error
+	uptimeResults []domain.Uptime
+	uptimeSince   []time.Time
+	uptimeErr     error
 }
 
 func (*memoryChecks) Insert(context.Context, *domain.Check) error { return nil }
@@ -332,7 +400,15 @@ func (repository *memoryChecks) ListByMonitor(_ context.Context, _ domain.ID, li
 	return nil, nil
 }
 
-func (*memoryChecks) UptimeSince(context.Context, domain.ID, time.Time) (domain.Uptime, error) {
+func (repository *memoryChecks) UptimeSince(_ context.Context, _ domain.ID, since time.Time) (domain.Uptime, error) {
+	repository.uptimeSince = append(repository.uptimeSince, since)
+	if repository.uptimeErr != nil {
+		return domain.Uptime{}, repository.uptimeErr
+	}
+	index := len(repository.uptimeSince) - 1
+	if index < len(repository.uptimeResults) {
+		return repository.uptimeResults[index], nil
+	}
 	return domain.Uptime{}, nil
 }
 
