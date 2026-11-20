@@ -89,6 +89,106 @@ func (auth *AuthenticationService) StartGoogleLogin() (GoogleLoginStart, error) 
 	}, nil
 }
 
+func (auth *AuthenticationService) GoogleCallback(ctx context.Context, code, codeVerifier string) (AuthenticationResult, error) {
+	if auth.dependencies.Google == nil {
+		return AuthenticationResult{}, apperrors.ErrProviderDisabled
+	}
+	identity, err := auth.dependencies.Google.Exchange(ctx, code, codeVerifier)
+	if err != nil {
+		return AuthenticationResult{}, err
+	}
+	if !identity.EmailVerified || strings.TrimSpace(identity.Sub) == "" {
+		return AuthenticationResult{}, apperrors.ErrInvalidCredentials
+	}
+	identity.Email = normalizeEmail(identity.Email)
+	if err := domain.ValidateEmail(identity.Email); err != nil {
+		return AuthenticationResult{}, apperrors.ErrInvalidCredentials
+	}
+
+	user, err := auth.dependencies.Users.GetByGoogleSub(ctx, identity.Sub)
+	if err == nil {
+		return auth.createSession(ctx, user)
+	}
+	if !errors.Is(err, apperrors.ErrNotFound) {
+		return AuthenticationResult{}, err
+	}
+
+	user, err = auth.dependencies.Users.GetByEmail(ctx, identity.Email)
+	if err == nil {
+		user, err = auth.linkGoogleAccount(ctx, user, identity.Sub)
+		if err != nil {
+			return AuthenticationResult{}, err
+		}
+		return auth.createSession(ctx, user)
+	}
+	if !errors.Is(err, apperrors.ErrNotFound) {
+		return AuthenticationResult{}, err
+	}
+	return auth.createGoogleAccount(ctx, identity)
+}
+
+func (auth *AuthenticationService) linkGoogleAccount(ctx context.Context, user *domain.User, sub string) (*domain.User, error) {
+	if user.GoogleSub == sub {
+		return user, nil
+	}
+	if user.GoogleSub != "" {
+		return nil, apperrors.ErrInvalidCredentials
+	}
+	if err := auth.dependencies.Users.LinkGoogleSubject(ctx, user.ID, sub); err == nil {
+		user.GoogleSub = sub
+		return user, nil
+	} else {
+		linked, lookupErr := auth.dependencies.Users.GetByGoogleSub(ctx, sub)
+		if lookupErr == nil {
+			return linked, nil
+		}
+		return nil, err
+	}
+}
+
+func (auth *AuthenticationService) createGoogleAccount(ctx context.Context, identity GoogleIdentity) (AuthenticationResult, error) {
+	name := strings.TrimSpace(identity.Name)
+	if domain.ValidateName(name) != nil {
+		name = identity.Email[:strings.IndexByte(identity.Email, '@')]
+	}
+	for range 5 {
+		slug, err := newStatusSlug()
+		if err != nil {
+			return AuthenticationResult{}, err
+		}
+		user := &domain.User{
+			Name:       name,
+			Email:      identity.Email,
+			GoogleSub:  identity.Sub,
+			StatusSlug: slug,
+			Notify:     domain.NotifySettings{EmailAlerts: true},
+			CreatedAt:  auth.dependencies.Clock.Now(),
+		}
+		if err := auth.dependencies.Users.Create(ctx, user); err == nil {
+			return auth.createSession(ctx, user)
+		} else if errors.Is(err, apperrors.ErrSlugTaken) {
+			continue
+		} else {
+			linked, lookupErr := auth.dependencies.Users.GetByGoogleSub(ctx, identity.Sub)
+			if lookupErr == nil {
+				return auth.createSession(ctx, linked)
+			}
+			if errors.Is(err, apperrors.ErrEmailTaken) {
+				existing, emailErr := auth.dependencies.Users.GetByEmail(ctx, identity.Email)
+				if emailErr == nil {
+					existing, linkErr := auth.linkGoogleAccount(ctx, existing, identity.Sub)
+					if linkErr == nil {
+						return auth.createSession(ctx, existing)
+					}
+					return AuthenticationResult{}, linkErr
+				}
+			}
+			return AuthenticationResult{}, err
+		}
+	}
+	return AuthenticationResult{}, apperrors.ErrSlugTaken
+}
+
 func (auth *AuthenticationService) Register(ctx context.Context, name, email, password string) (AuthenticationResult, error) {
 	name = strings.TrimSpace(name)
 	email = normalizeEmail(email)

@@ -11,6 +11,7 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByGoogleSub(ctx context.Context, sub string) (*User, error)
 	GetBySlug(ctx context.Context, slug string) (*User, error)
+	LinkGoogleSubject(ctx context.Context, id ID, sub string) error
 	Update(ctx context.Context, user *User) error
 }
 

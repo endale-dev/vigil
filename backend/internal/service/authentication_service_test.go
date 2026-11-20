@@ -57,6 +57,80 @@ func TestAuthenticationServiceStartGoogleLoginRejectsDisabledProvider(t *testing
 	}
 }
 
+func TestAuthenticationServiceGoogleCallbackLinksExistingAccount(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.stored["user-1"] = &domain.User{ID: "user-1", Name: "Example", Email: "user@example.test", PasswordHash: "password-hash"}
+	provider := &fixedGoogleProvider{identity: GoogleIdentity{Sub: "google-sub", Email: " USER@example.test ", Name: "Example", EmailVerified: true}}
+	auth.dependencies.Google = provider
+	result, err := auth.GoogleCallback(context.Background(), "authorization-code", "code-verifier")
+	if err != nil {
+		t.Fatalf("GoogleCallback() error = %v", err)
+	}
+	if result.User.ID != "user-1" || users.stored["user-1"].GoogleSub != "google-sub" || result.User.PasswordHash != "" || len(sessions.created) != 1 {
+		t.Fatalf("callback result/account/session = %+v / %+v / %+v", result, users.stored["user-1"], sessions.created)
+	}
+	if provider.code != "authorization-code" || provider.verifier != "code-verifier" {
+		t.Fatalf("provider received code/verifier %q/%q", provider.code, provider.verifier)
+	}
+}
+
+func TestAuthenticationServiceGoogleCallbackCreatesGoogleOnlyAccount(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.June, 7, 8, 9, 10, 0, time.UTC)}
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, clock)
+	auth.dependencies.Google = &fixedGoogleProvider{identity: GoogleIdentity{Sub: "google-sub", Email: "new@example.test", Name: "New User", EmailVerified: true}}
+	result, err := auth.GoogleCallback(context.Background(), "authorization-code", "code-verifier")
+	if err != nil {
+		t.Fatalf("GoogleCallback() error = %v", err)
+	}
+	user := users.stored[result.User.ID]
+	if result.User.ID == "" || result.User.PasswordHash != "" || user.GoogleSub != "google-sub" || user.Notify.EmailAlerts != true || !user.CreatedAt.Equal(clock.now) || len(sessions.created) != 1 {
+		t.Fatalf("created user/result/sessions = %+v / %+v / %+v", user, result, sessions.created)
+	}
+}
+
+func TestAuthenticationServiceGoogleCallbackHandlesDuplicateEmailRace(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.createHook = func(_ *domain.User) error {
+		users.stored["racing-user"] = &domain.User{ID: "racing-user", Email: "user@example.test", PasswordHash: "password-hash"}
+		return apperrors.ErrEmailTaken
+	}
+	auth.dependencies.Google = &fixedGoogleProvider{identity: GoogleIdentity{Sub: "google-sub", Email: "user@example.test", Name: "Example", EmailVerified: true}}
+	result, err := auth.GoogleCallback(context.Background(), "authorization-code", "code-verifier")
+	if err != nil {
+		t.Fatalf("GoogleCallback() error = %v", err)
+	}
+	if result.User.ID != "racing-user" || users.stored["racing-user"].GoogleSub != "google-sub" || len(sessions.created) != 1 {
+		t.Fatalf("race result/account/sessions = %+v / %+v / %+v", result, users.stored["racing-user"], sessions.created)
+	}
+}
+
+func TestAuthenticationServiceGoogleCallbackHandlesDuplicateSubjectRace(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.createHook = func(_ *domain.User) error {
+		users.stored["racing-user"] = &domain.User{ID: "racing-user", Email: "user@example.test", GoogleSub: "google-sub"}
+		return errors.New("duplicate Google subject")
+	}
+	auth.dependencies.Google = &fixedGoogleProvider{identity: GoogleIdentity{Sub: "google-sub", Email: "user@example.test", Name: "Example", EmailVerified: true}}
+	result, err := auth.GoogleCallback(context.Background(), "authorization-code", "code-verifier")
+	if err != nil {
+		t.Fatalf("GoogleCallback() error = %v", err)
+	}
+	if result.User.ID != "racing-user" || len(sessions.created) != 1 {
+		t.Fatalf("race result/sessions = %+v / %+v", result, sessions.created)
+	}
+}
+
+func TestAuthenticationServiceGoogleCallbackRejectsUnverifiedIdentity(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	auth.dependencies.Google = &fixedGoogleProvider{identity: GoogleIdentity{Sub: "google-sub", Email: "user@example.test"}}
+	if _, err := auth.GoogleCallback(context.Background(), "authorization-code", "code-verifier"); err != apperrors.ErrInvalidCredentials {
+		t.Fatalf("GoogleCallback() error = %v, want ErrInvalidCredentials", err)
+	}
+	if users.createCalls != 0 || len(sessions.created) != 0 {
+		t.Fatal("unverified Google identity created an account or session")
+	}
+}
+
 func TestAuthenticationServiceRegisterCreatesUserAndSession(t *testing.T) {
 	clock := &fixedServiceClock{now: time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)}
 	auth, users, sessions, _, tokens := newTestAuthenticationService(t, clock)
@@ -396,6 +470,9 @@ type fixedGoogleProvider struct {
 	authorizationURL string
 	state            string
 	challenge        string
+	identity         GoogleIdentity
+	code             string
+	verifier         string
 }
 
 func (provider *fixedGoogleProvider) AuthURL(state, challenge string) string {
@@ -404,8 +481,10 @@ func (provider *fixedGoogleProvider) AuthURL(state, challenge string) string {
 	return provider.authorizationURL
 }
 
-func (*fixedGoogleProvider) Exchange(context.Context, string, string) (GoogleIdentity, error) {
-	return GoogleIdentity{}, errors.New("not implemented")
+func (provider *fixedGoogleProvider) Exchange(_ context.Context, code, verifier string) (GoogleIdentity, error) {
+	provider.code = code
+	provider.verifier = verifier
+	return provider.identity, nil
 }
 
 func (mailer *fixedMailer) Send(_ context.Context, message Mail) error {
@@ -416,11 +495,17 @@ func (mailer *fixedMailer) Send(_ context.Context, message Mail) error {
 type memoryUsers struct {
 	stored       map[domain.ID]*domain.User
 	createErrors []error
+	createHook   func(*domain.User) error
 	createCalls  int
 }
 
 func (repository *memoryUsers) Create(_ context.Context, user *domain.User) error {
 	repository.createCalls++
+	if repository.createHook != nil {
+		if err := repository.createHook(user); err != nil {
+			return err
+		}
+	}
 	index := repository.createCalls - 1
 	if index < len(repository.createErrors) && repository.createErrors[index] != nil {
 		return repository.createErrors[index]
@@ -451,12 +536,35 @@ func (repository *memoryUsers) GetByEmail(_ context.Context, email string) (*dom
 	return nil, apperrors.ErrNotFound
 }
 
-func (*memoryUsers) GetByGoogleSub(context.Context, string) (*domain.User, error) {
+func (repository *memoryUsers) GetByGoogleSub(_ context.Context, sub string) (*domain.User, error) {
+	for _, user := range repository.stored {
+		if user.GoogleSub == sub {
+			copyOfUser := *user
+			return &copyOfUser, nil
+		}
+	}
 	return nil, apperrors.ErrNotFound
 }
 
 func (*memoryUsers) GetBySlug(context.Context, string) (*domain.User, error) {
 	return nil, apperrors.ErrNotFound
+}
+
+func (repository *memoryUsers) LinkGoogleSubject(_ context.Context, id domain.ID, sub string) error {
+	user, ok := repository.stored[id]
+	if !ok {
+		return apperrors.ErrNotFound
+	}
+	for _, candidate := range repository.stored {
+		if candidate.GoogleSub == sub && candidate.ID != id {
+			return apperrors.ErrInvalidCredentials
+		}
+	}
+	if user.GoogleSub != "" && user.GoogleSub != sub {
+		return apperrors.ErrInvalidCredentials
+	}
+	user.GoogleSub = sub
+	return nil
 }
 
 func (repository *memoryUsers) Update(_ context.Context, user *domain.User) error {

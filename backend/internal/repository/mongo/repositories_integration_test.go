@@ -135,6 +135,28 @@ func TestIntegrationUserSessionAndPasswordResetRepositories(t *testing.T) {
 	}
 }
 
+func TestIntegrationUserRepositoryLinksGoogleSubjectOnce(t *testing.T) {
+	database, ctx := integrationDatabase(t)
+	users := NewUserRepository(database)
+	user := &domain.User{Name: "Integration User", Email: "link@example.test", StatusSlug: integrationSlug()}
+	if err := users.Create(ctx, user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	if err := users.LinkGoogleSubject(ctx, user.ID, "google-subject"); err != nil {
+		t.Fatalf("link Google subject: %v", err)
+	}
+	if err := users.LinkGoogleSubject(ctx, user.ID, "google-subject"); err != nil {
+		t.Fatalf("repeat same Google link: %v", err)
+	}
+	if err := users.LinkGoogleSubject(ctx, user.ID, "different-subject"); err != apperrors.ErrInvalidCredentials {
+		t.Fatalf("replace Google subject error = %v, want ErrInvalidCredentials", err)
+	}
+	linked, err := users.GetByGoogleSub(ctx, "google-subject")
+	if err != nil || linked.ID != user.ID {
+		t.Fatalf("get linked user = (%+v, %v), want ID %s", linked, err, user.ID)
+	}
+}
+
 func TestIntegrationUniqueConstraints(t *testing.T) {
 	database, ctx := integrationDatabase(t)
 	users := NewUserRepository(database)

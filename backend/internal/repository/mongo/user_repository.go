@@ -68,6 +68,31 @@ func (repository *userRepository) GetBySlug(ctx context.Context, slug string) (*
 	return repository.find(ctx, bson.D{{Key: "statusSlug", Value: slug}})
 }
 
+func (repository *userRepository) LinkGoogleSubject(ctx context.Context, id domain.ID, sub string) error {
+	objectID, err := idToObjectID(id)
+	if err != nil {
+		return err
+	}
+	result, err := repository.collection.UpdateOne(ctx, bson.D{
+		{Key: "_id", Value: objectID},
+		{Key: "googleSub", Value: ""},
+	}, bson.D{{Key: "$set", Value: bson.D{{Key: "googleSub", Value: sub}}}})
+	if err != nil {
+		return mapError(err)
+	}
+	if result.MatchedCount > 0 {
+		return nil
+	}
+	user, err := repository.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if user.GoogleSub == sub {
+		return nil
+	}
+	return apperrors.ErrInvalidCredentials
+}
+
 func (repository *userRepository) Update(ctx context.Context, user *domain.User) error {
 	objectID, err := idToObjectID(user.ID)
 	if err != nil {
