@@ -6,6 +6,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -129,6 +130,49 @@ func (auth *AuthenticationService) Authenticate(ctx context.Context, rawToken st
 	}
 	user.PasswordHash = ""
 	return AuthenticatedSession{User: *user, Session: *session}, nil
+}
+
+func (auth *AuthenticationService) ForgotPassword(ctx context.Context, email string) error {
+	email = normalizeEmail(email)
+	if err := domain.ValidateEmail(email); err != nil {
+		return err
+	}
+	user, err := auth.dependencies.Users.GetByEmail(ctx, email)
+	if errors.Is(err, apperrors.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		auth.dependencies.Logger.ErrorContext(ctx, "forgot-password processing failed")
+		return nil
+	}
+	if err := auth.dependencies.PasswordResets.DeleteByUser(ctx, user.ID); err != nil {
+		auth.dependencies.Logger.ErrorContext(ctx, "forgot-password processing failed")
+		return nil
+	}
+	rawToken, tokenHash, err := auth.dependencies.Tokens.New()
+	if err != nil {
+		auth.dependencies.Logger.ErrorContext(ctx, "forgot-password processing failed")
+		return nil
+	}
+	now := auth.dependencies.Clock.Now()
+	reset := &domain.PasswordReset{
+		UserID:    user.ID,
+		TokenHash: tokenHash,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	if err := auth.dependencies.PasswordResets.Create(ctx, reset); err != nil {
+		auth.dependencies.Logger.ErrorContext(ctx, "forgot-password processing failed")
+		return nil
+	}
+	resetURL := strings.TrimRight(auth.dependencies.BaseURL, "/") + "/reset-password?token=" + url.QueryEscape(rawToken)
+	if err := auth.dependencies.Mailer.Send(ctx, Mail{
+		To:      user.Email,
+		Subject: "Reset your Vigil password",
+		Body:    "Use this link to reset your password:\n" + resetURL,
+	}); err != nil {
+		auth.dependencies.Logger.ErrorContext(ctx, "forgot-password email could not be sent")
+	}
+	return nil
 }
 
 func (auth *AuthenticationService) createSession(ctx context.Context, user *domain.User) (AuthenticationResult, error) {

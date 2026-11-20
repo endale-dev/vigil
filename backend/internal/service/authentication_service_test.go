@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,6 +219,47 @@ func TestAuthenticationServiceLogoutDeletesSession(t *testing.T) {
 	}
 }
 
+func TestAuthenticationServiceForgotPasswordCreatesAndEmailsReset(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.April, 5, 6, 7, 8, 0, time.UTC)}
+	auth, users, _, resets, _ := newTestAuthenticationService(t, clock)
+	users.stored["user-1"] = &domain.User{ID: "user-1", Email: "user@example.test"}
+	if err := auth.ForgotPassword(context.Background(), " USER@example.test "); err != nil {
+		t.Fatalf("ForgotPassword() error = %v", err)
+	}
+	if len(resets.created) != 1 || resets.created[0].UserID != "user-1" || resets.created[0].TokenHash != "stored-session-hash" || !resets.created[0].ExpiresAt.Equal(clock.now.Add(time.Hour)) {
+		t.Fatalf("created resets = %+v", resets.created)
+	}
+	mailer := auth.dependencies.Mailer.(*fixedMailer)
+	if len(mailer.messages) != 1 || mailer.messages[0].To != "user@example.test" || !strings.Contains(mailer.messages[0].Body, "/reset-password?token=raw-session-token") {
+		t.Fatalf("sent messages = %+v", mailer.messages)
+	}
+}
+
+func TestAuthenticationServiceForgotPasswordIsNeutralForUnknownUsers(t *testing.T) {
+	auth, _, _, resets, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	if err := auth.ForgotPassword(context.Background(), "missing@example.test"); err != nil {
+		t.Fatalf("ForgotPassword() error = %v", err)
+	}
+	if len(resets.created) != 0 || len(auth.dependencies.Mailer.(*fixedMailer).messages) != 0 {
+		t.Fatal("unknown account created a reset token or sent an email")
+	}
+}
+
+func TestAuthenticationServiceForgotPasswordDoesNotExposeMailFailure(t *testing.T) {
+	var logs strings.Builder
+	auth, users, _, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.stored["user-1"] = &domain.User{ID: "user-1", Email: "user@example.test"}
+	auth.dependencies.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	mailer := auth.dependencies.Mailer.(*fixedMailer)
+	mailer.err = errors.New("mail failed for user@example.test")
+	if err := auth.ForgotPassword(context.Background(), "user@example.test"); err != nil {
+		t.Fatalf("ForgotPassword() exposed mail failure: %v", err)
+	}
+	if strings.Contains(logs.String(), "user@example.test") || strings.Contains(logs.String(), "mail failed") {
+		t.Fatalf("logs exposed private mail details: %s", logs.String())
+	}
+}
+
 func newTestAuthenticationService(t *testing.T, clock Clock) (*AuthenticationService, *memoryUsers, *memorySessions, *memoryPasswordResets, *fixedTokens) {
 	t.Helper()
 	users := &memoryUsers{stored: make(map[domain.ID]*domain.User)}
@@ -226,7 +268,7 @@ func newTestAuthenticationService(t *testing.T, clock Clock) (*AuthenticationSer
 	tokens := &fixedTokens{}
 	service, err := NewAuthenticationService(AuthenticationDependencies{
 		Users: users, Sessions: sessions, PasswordResets: resets,
-		Passwords: fixedPasswords{}, Tokens: tokens, Mailer: fixedMailer{},
+		Passwords: fixedPasswords{}, Tokens: tokens, Mailer: &fixedMailer{},
 		Clock: clock, BaseURL: "https://vigil.example.test", SessionTTL: 24 * time.Hour,
 		Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
@@ -251,11 +293,22 @@ func (tokens *fixedTokens) New() (string, string, error) {
 	tokens.newCalls++
 	return "raw-session-token", "stored-session-hash", nil
 }
-func (*fixedTokens) Hash(raw string) string { return "hashed:" + raw }
+func (*fixedTokens) Hash(raw string) string {
+	if raw == "raw-session-token" {
+		return "stored-session-hash"
+	}
+	return "hashed:" + raw
+}
 
-type fixedMailer struct{}
+type fixedMailer struct {
+	messages []Mail
+	err      error
+}
 
-func (fixedMailer) Send(context.Context, Mail) error { return nil }
+func (mailer *fixedMailer) Send(_ context.Context, message Mail) error {
+	mailer.messages = append(mailer.messages, message)
+	return mailer.err
+}
 
 type memoryUsers struct {
 	stored       map[domain.ID]*domain.User
@@ -310,10 +363,12 @@ func (repository *memoryUsers) Update(_ context.Context, user *domain.User) erro
 }
 
 type memorySessions struct {
-	created    []*domain.Session
-	deletedIDs []domain.ID
-	err        error
-	deleteErr  error
+	created      []*domain.Session
+	deletedIDs   []domain.ID
+	userDeleted  []domain.ID
+	keptSessions []domain.ID
+	err          error
+	deleteErr    error
 }
 
 func (repository *memorySessions) Create(_ context.Context, session *domain.Session) error {
@@ -346,16 +401,53 @@ func (repository *memorySessions) Delete(_ context.Context, id domain.ID) error 
 	repository.deletedIDs = append(repository.deletedIDs, id)
 	return nil
 }
-func (*memorySessions) DeleteByUserExcept(context.Context, domain.ID, domain.ID) error { return nil }
-func (*memorySessions) DeleteByUser(context.Context, domain.ID) error                  { return nil }
+func (repository *memorySessions) DeleteByUserExcept(_ context.Context, userID, keep domain.ID) error {
+	repository.keptSessions = append(repository.keptSessions, keep)
+	for _, session := range repository.created {
+		if session.UserID == userID && session.ID != keep {
+			repository.deletedIDs = append(repository.deletedIDs, session.ID)
+		}
+	}
+	return nil
+}
+func (repository *memorySessions) DeleteByUser(_ context.Context, userID domain.ID) error {
+	repository.userDeleted = append(repository.userDeleted, userID)
+	for _, session := range repository.created {
+		if session.UserID == userID {
+			repository.deletedIDs = append(repository.deletedIDs, session.ID)
+		}
+	}
+	return nil
+}
 
-type memoryPasswordResets struct{}
+type memoryPasswordResets struct {
+	created      []*domain.PasswordReset
+	deletedUsers []domain.ID
+}
 
-func (*memoryPasswordResets) Create(context.Context, *domain.PasswordReset) error { return nil }
-func (*memoryPasswordResets) GetByTokenHash(context.Context, string) (*domain.PasswordReset, error) {
+func (repository *memoryPasswordResets) Create(_ context.Context, reset *domain.PasswordReset) error {
+	copyOfReset := *reset
+	repository.created = append(repository.created, &copyOfReset)
+	return nil
+}
+func (repository *memoryPasswordResets) GetByTokenHash(_ context.Context, hash string) (*domain.PasswordReset, error) {
+	for _, reset := range repository.created {
+		if reset.TokenHash == hash {
+			for _, deletedUser := range repository.deletedUsers {
+				if deletedUser == reset.UserID {
+					return nil, apperrors.ErrNotFound
+				}
+			}
+			copyOfReset := *reset
+			return &copyOfReset, nil
+		}
+	}
 	return nil, apperrors.ErrNotFound
 }
-func (*memoryPasswordResets) DeleteByUser(context.Context, domain.ID) error { return nil }
+func (repository *memoryPasswordResets) DeleteByUser(_ context.Context, userID domain.ID) error {
+	repository.deletedUsers = append(repository.deletedUsers, userID)
+	return nil
+}
 
 var _ domain.UserRepository = (*memoryUsers)(nil)
 var _ domain.SessionRepository = (*memorySessions)(nil)
