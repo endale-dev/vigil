@@ -210,6 +210,31 @@ func (auth *AuthenticationService) ResetPassword(ctx context.Context, rawToken, 
 	return auth.dependencies.Sessions.DeleteByUser(ctx, user.ID)
 }
 
+func (auth *AuthenticationService) ChangePassword(ctx context.Context, userID, currentSessionID domain.ID, currentPassword, newPassword string) error {
+	user, err := auth.dependencies.Users.GetByID(ctx, userID)
+	if errors.Is(err, apperrors.ErrNotFound) {
+		return apperrors.ErrInvalidCredentials
+	}
+	if err != nil {
+		return err
+	}
+	if user.PasswordHash == "" || !auth.dependencies.Passwords.Verify(currentPassword, user.PasswordHash) {
+		return apperrors.ErrInvalidCredentials
+	}
+	if err := domain.ValidatePassword(newPassword); err != nil {
+		return err
+	}
+	passwordHash, err := auth.dependencies.Passwords.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = passwordHash
+	if err := auth.dependencies.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	return auth.dependencies.Sessions.DeleteByUserExcept(ctx, user.ID, currentSessionID)
+}
+
 func (auth *AuthenticationService) createSession(ctx context.Context, user *domain.User) (AuthenticationResult, error) {
 	rawToken, tokenHash, err := auth.dependencies.Tokens.New()
 	if err != nil {

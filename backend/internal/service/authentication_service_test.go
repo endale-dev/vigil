@@ -291,6 +291,32 @@ func TestAuthenticationServiceResetPasswordRejectsMissingOrExpiredToken(t *testi
 	}
 }
 
+func TestAuthenticationServiceChangePasswordKeepsCurrentSession(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.stored["user-1"] = &domain.User{ID: "user-1", PasswordHash: "hashed:old-password"}
+	sessions.created = append(sessions.created, &domain.Session{ID: "session-1", UserID: "user-1"}, &domain.Session{ID: "session-2", UserID: "user-1"})
+	if err := auth.ChangePassword(context.Background(), "user-1", "session-1", "old-password", "new-password"); err != nil {
+		t.Fatalf("ChangePassword() error = %v", err)
+	}
+	if users.stored["user-1"].PasswordHash != "hashed:new-password" || len(sessions.keptSessions) != 1 || sessions.keptSessions[0] != "session-1" || len(sessions.deletedIDs) != 1 || sessions.deletedIDs[0] != "session-2" {
+		t.Fatalf("password/session state = %+v / %+v", users.stored["user-1"], sessions)
+	}
+}
+
+func TestAuthenticationServiceChangePasswordRejectsWrongAndGoogleOnlyCredentials(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.stored["password-user"] = &domain.User{ID: "password-user", PasswordHash: "hashed:old-password"}
+	users.stored["google-user"] = &domain.User{ID: "google-user", GoogleSub: "google-sub"}
+	for _, test := range []struct{ id, password string }{{"password-user", "wrong-password"}, {"google-user", "old-password"}} {
+		if err := auth.ChangePassword(context.Background(), domain.ID(test.id), "session-1", test.password, "new-password"); err != apperrors.ErrInvalidCredentials {
+			t.Errorf("ChangePassword(%q) error = %v, want ErrInvalidCredentials", test.id, err)
+		}
+	}
+	if users.stored["password-user"].PasswordHash != "hashed:old-password" || len(sessions.keptSessions) != 0 {
+		t.Fatal("failed password changes modified account/session state")
+	}
+}
+
 func newTestAuthenticationService(t *testing.T, clock Clock) (*AuthenticationService, *memoryUsers, *memorySessions, *memoryPasswordResets, *fixedTokens) {
 	t.Helper()
 	users := &memoryUsers{stored: make(map[domain.ID]*domain.User)}
