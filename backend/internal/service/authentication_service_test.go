@@ -167,6 +167,57 @@ func TestAuthenticationServiceLoginCreatesSessionOnSuccess(t *testing.T) {
 	}
 }
 
+func TestAuthenticationServiceAuthenticateReturnsUserAndSession(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.March, 4, 5, 6, 7, 0, time.UTC)}
+	auth, users, sessions, _, tokens := newTestAuthenticationService(t, clock)
+	users.stored["user-1"] = &domain.User{
+		ID: "user-1", Name: "Example", Email: "user@example.test", PasswordHash: "private-hash",
+	}
+	sessions.created = append(sessions.created, &domain.Session{
+		ID: "session-1", UserID: "user-1", TokenHash: tokens.Hash("raw-token"),
+		CreatedAt: clock.now.Add(-time.Hour), ExpiresAt: clock.now.Add(time.Hour),
+	})
+	result, err := auth.Authenticate(context.Background(), "raw-token")
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if result.User.ID != "user-1" || result.User.PasswordHash != "" || result.Session.ID != "session-1" {
+		t.Fatalf("Authenticate() = %+v", result)
+	}
+}
+
+func TestAuthenticationServiceAuthenticateDeletesExpiredSession(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.March, 4, 5, 6, 7, 0, time.UTC)}
+	auth, _, sessions, _, tokens := newTestAuthenticationService(t, clock)
+	sessions.created = append(sessions.created, &domain.Session{
+		ID: "expired-session", UserID: "user-1", TokenHash: tokens.Hash("expired-token"),
+		ExpiresAt: clock.now,
+	})
+	if _, err := auth.Authenticate(context.Background(), "expired-token"); err != apperrors.ErrUnauthenticated {
+		t.Fatalf("Authenticate() error = %v, want ErrUnauthenticated", err)
+	}
+	if len(sessions.deletedIDs) != 1 || sessions.deletedIDs[0] != "expired-session" {
+		t.Fatalf("deleted session IDs = %v", sessions.deletedIDs)
+	}
+}
+
+func TestAuthenticationServiceAuthenticateUsesUniformUnauthenticatedError(t *testing.T) {
+	auth, _, _, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	if _, err := auth.Authenticate(context.Background(), "unknown-token"); err != apperrors.ErrUnauthenticated {
+		t.Fatalf("Authenticate() error = %v, want ErrUnauthenticated", err)
+	}
+}
+
+func TestAuthenticationServiceLogoutDeletesSession(t *testing.T) {
+	auth, _, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	if err := auth.Logout(context.Background(), "session-1"); err != nil {
+		t.Fatalf("Logout() error = %v", err)
+	}
+	if len(sessions.deletedIDs) != 1 || sessions.deletedIDs[0] != "session-1" {
+		t.Fatalf("deleted session IDs = %v", sessions.deletedIDs)
+	}
+}
+
 func newTestAuthenticationService(t *testing.T, clock Clock) (*AuthenticationService, *memoryUsers, *memorySessions, *memoryPasswordResets, *fixedTokens) {
 	t.Helper()
 	users := &memoryUsers{stored: make(map[domain.ID]*domain.User)}
@@ -259,8 +310,10 @@ func (repository *memoryUsers) Update(_ context.Context, user *domain.User) erro
 }
 
 type memorySessions struct {
-	created []*domain.Session
-	err     error
+	created    []*domain.Session
+	deletedIDs []domain.ID
+	err        error
+	deleteErr  error
 }
 
 func (repository *memorySessions) Create(_ context.Context, session *domain.Session) error {
@@ -272,14 +325,29 @@ func (repository *memorySessions) Create(_ context.Context, session *domain.Sess
 	return nil
 }
 
-func (*memorySessions) GetByTokenHash(context.Context, string) (*domain.Session, error) {
+func (repository *memorySessions) GetByTokenHash(_ context.Context, hash string) (*domain.Session, error) {
+	for _, session := range repository.created {
+		if session.TokenHash == hash {
+			for _, deletedID := range repository.deletedIDs {
+				if deletedID == session.ID {
+					return nil, apperrors.ErrNotFound
+				}
+			}
+			copyOfSession := *session
+			return &copyOfSession, nil
+		}
+	}
 	return nil, apperrors.ErrNotFound
 }
-func (*memorySessions) Delete(context.Context, domain.ID) error { return nil }
-func (*memorySessions) DeleteByUserExcept(context.Context, domain.ID, domain.ID) error {
+func (repository *memorySessions) Delete(_ context.Context, id domain.ID) error {
+	if repository.deleteErr != nil {
+		return repository.deleteErr
+	}
+	repository.deletedIDs = append(repository.deletedIDs, id)
 	return nil
 }
-func (*memorySessions) DeleteByUser(context.Context, domain.ID) error { return nil }
+func (*memorySessions) DeleteByUserExcept(context.Context, domain.ID, domain.ID) error { return nil }
+func (*memorySessions) DeleteByUser(context.Context, domain.ID) error                  { return nil }
 
 type memoryPasswordResets struct{}
 

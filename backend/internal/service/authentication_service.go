@@ -36,6 +36,11 @@ type AuthenticationResult struct {
 	SessionToken string
 }
 
+type AuthenticatedSession struct {
+	User    domain.User
+	Session domain.Session
+}
+
 func NewAuthenticationService(dependencies AuthenticationDependencies) (*AuthenticationService, error) {
 	if dependencies.Users == nil || dependencies.Sessions == nil || dependencies.PasswordResets == nil ||
 		dependencies.Passwords == nil || dependencies.Tokens == nil || dependencies.Mailer == nil ||
@@ -103,6 +108,27 @@ func (auth *AuthenticationService) Login(ctx context.Context, email, password st
 		return AuthenticationResult{}, apperrors.ErrInvalidCredentials
 	}
 	return auth.createSession(ctx, user)
+}
+
+func (auth *AuthenticationService) Logout(ctx context.Context, sessionID domain.ID) error {
+	return auth.dependencies.Sessions.Delete(ctx, sessionID)
+}
+
+func (auth *AuthenticationService) Authenticate(ctx context.Context, rawToken string) (AuthenticatedSession, error) {
+	session, err := auth.dependencies.Sessions.GetByTokenHash(ctx, auth.dependencies.Tokens.Hash(rawToken))
+	if err != nil {
+		return AuthenticatedSession{}, apperrors.ErrUnauthenticated
+	}
+	if !session.ExpiresAt.After(auth.dependencies.Clock.Now()) {
+		_ = auth.dependencies.Sessions.Delete(ctx, session.ID)
+		return AuthenticatedSession{}, apperrors.ErrUnauthenticated
+	}
+	user, err := auth.dependencies.Users.GetByID(ctx, session.UserID)
+	if err != nil {
+		return AuthenticatedSession{}, apperrors.ErrUnauthenticated
+	}
+	user.PasswordHash = ""
+	return AuthenticatedSession{User: *user, Session: *session}, nil
 }
 
 func (auth *AuthenticationService) createSession(ctx context.Context, user *domain.User) (AuthenticationResult, error) {
