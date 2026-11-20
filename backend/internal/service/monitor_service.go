@@ -62,3 +62,45 @@ func (monitors *MonitorService) Create(ctx context.Context, ownerID domain.ID, d
 	}
 	return &monitor, nil
 }
+
+func (monitors *MonitorService) List(ctx context.Context, ownerID domain.ID) ([]domain.Monitor, error) {
+	return monitors.monitors.ListByOwner(ctx, ownerID)
+}
+
+func (monitors *MonitorService) Get(ctx context.Context, ownerID, monitorID domain.ID) (*domain.Monitor, error) {
+	monitor, err := monitors.monitors.GetByID(ctx, monitorID)
+	if err != nil {
+		return nil, err
+	}
+	if monitor.OwnerID != ownerID {
+		return nil, apperrors.ErrNotFound
+	}
+	return monitor, nil
+}
+
+func (monitors *MonitorService) Update(ctx context.Context, ownerID, monitorID domain.ID, draft domain.Monitor) (*domain.Monitor, error) {
+	monitor, err := monitors.Get(ctx, ownerID, monitorID)
+	if err != nil {
+		return nil, err
+	}
+	targetChanged := monitor.Type != draft.Type || monitor.Target != draft.Target
+	monitor.Name = strings.TrimSpace(draft.Name)
+	monitor.Type = draft.Type
+	monitor.Target = draft.Target
+	monitor.Interval = draft.Interval
+	monitor.Timeout = draft.Timeout
+	monitor.ExpectedStatus = draft.ExpectedStatus
+	monitor.TLSWarnDays = draft.TLSWarnDays
+	monitor.Public = draft.Public
+	if targetChanged {
+		monitor.Status = domain.StatusUnknown
+		monitor.ConsecutiveFailures = 0
+	}
+	if err := monitor.Validate(); err != nil {
+		return nil, err
+	}
+	if err := monitors.monitors.Update(ctx, monitor); err != nil {
+		return nil, err
+	}
+	return monitor, nil
+}

@@ -103,10 +103,105 @@ func TestMonitorServicePropagatesCountAndCreateFailures(t *testing.T) {
 	}
 }
 
+func TestMonitorServiceListAndGetAreOwnerScoped(t *testing.T) {
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1"},
+		"monitor-2": {ID: "monitor-2", OwnerID: "owner-2"},
+	}}
+	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := monitors.List(context.Background(), "owner-1")
+	if err != nil || len(list) != 1 || list[0].ID != "monitor-1" {
+		t.Fatalf("List(owner-1) = (%+v, %v), want only monitor-1", list, err)
+	}
+	if _, err := monitors.Get(context.Background(), "owner-1", "monitor-2"); err != apperrors.ErrNotFound {
+		t.Fatalf("Get(other owner's monitor) error = %v, want ErrNotFound", err)
+	}
+	if _, err := monitors.Get(context.Background(), "owner-1", "missing"); err != apperrors.ErrNotFound {
+		t.Fatalf("Get(missing monitor) error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestMonitorServiceUpdateResetsStateWhenTargetChanges(t *testing.T) {
+	now := time.Date(2026, time.August, 9, 10, 11, 12, 0, time.UTC)
+	existing := domain.Monitor{
+		ID: "monitor-1", OwnerID: "owner-1", Name: "Old API", Type: domain.MonitorHTTP,
+		Target: "https://old.example.test", Interval: time.Minute, Timeout: 10 * time.Second,
+		Public: true, Enabled: false, Status: domain.StatusDown, ConsecutiveFailures: 4,
+		CreatedAt: now.Add(-time.Hour), LastCheckedAt: now.Add(-time.Minute),
+	}
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{"monitor-1": existing}}
+	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: now}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := monitors.Update(context.Background(), "owner-1", "monitor-1", domain.Monitor{
+		ID: "ignored-id", OwnerID: "other-owner", Name: " New API ", Type: domain.MonitorHTTP,
+		Target: "https://new.example.test", Interval: 2 * time.Minute, Timeout: 5 * time.Second,
+		ExpectedStatus: 204, Public: false, Enabled: true, Status: domain.StatusUp,
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.ID != existing.ID || updated.OwnerID != existing.OwnerID || updated.Name != "New API" || updated.Interval != 2*time.Minute || updated.Timeout != 5*time.Second || updated.ExpectedStatus != 204 || updated.Public {
+		t.Fatalf("updated monitor fields = %+v", updated)
+	}
+	if updated.Status != domain.StatusUnknown || updated.ConsecutiveFailures != 0 || updated.Enabled || !updated.CreatedAt.Equal(existing.CreatedAt) || !updated.LastCheckedAt.Equal(existing.LastCheckedAt) {
+		t.Fatalf("update changed protected state incorrectly: %+v", updated)
+	}
+	if repository.items[existing.ID] != *updated {
+		t.Fatal("updated monitor was not persisted")
+	}
+}
+
+func TestMonitorServiceUpdatePreservesStatusWithoutTargetChange(t *testing.T) {
+	existing := domain.Monitor{
+		ID: "monitor-1", OwnerID: "owner-1", Name: "API", Type: domain.MonitorHTTP,
+		Target: "https://example.test", Interval: time.Minute, Timeout: 10 * time.Second,
+		Status: domain.StatusDown, ConsecutiveFailures: 3,
+	}
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{existing.ID: existing}}
+	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := monitors.Update(context.Background(), "owner-1", existing.ID, existing)
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.Status != existing.Status || updated.ConsecutiveFailures != existing.ConsecutiveFailures {
+		t.Fatalf("Update() reset unchanged target state: %+v", updated)
+	}
+}
+
+func TestMonitorServiceUpdateHidesOtherOwnersAndRejectsInvalidChanges(t *testing.T) {
+	existing := domain.Monitor{
+		ID: "monitor-1", OwnerID: "owner-1", Name: "API", Type: domain.MonitorHTTP,
+		Target: "https://example.test", Interval: time.Minute, Timeout: 10 * time.Second,
+	}
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{existing.ID: existing}}
+	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := monitors.Update(context.Background(), "owner-2", existing.ID, domain.Monitor{}); err != apperrors.ErrNotFound {
+		t.Fatalf("Update(other owner) error = %v, want ErrNotFound", err)
+	}
+	if _, err := monitors.Update(context.Background(), "owner-1", existing.ID, domain.Monitor{Name: "Bad", Type: domain.MonitorHTTP, Target: "invalid"}); err == nil {
+		t.Fatal("Update() accepted invalid monitor fields")
+	}
+	if repository.items[existing.ID] != existing {
+		t.Fatal("invalid or unauthorized update changed monitor")
+	}
+}
+
 type memoryMonitors struct {
 	items     map[domain.ID]domain.Monitor
 	countErr  error
 	createErr error
+	updateErr error
 }
 
 func (repository *memoryMonitors) Create(_ context.Context, monitor *domain.Monitor) error {
@@ -163,6 +258,9 @@ func (repository *memoryMonitors) CountByOwner(_ context.Context, owner domain.I
 }
 
 func (repository *memoryMonitors) Update(_ context.Context, monitor *domain.Monitor) error {
+	if repository.updateErr != nil {
+		return repository.updateErr
+	}
 	if _, ok := repository.items[monitor.ID]; !ok {
 		return apperrors.ErrNotFound
 	}
