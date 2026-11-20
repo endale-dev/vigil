@@ -497,6 +497,7 @@ type memoryUsers struct {
 	createErrors []error
 	createHook   func(*domain.User) error
 	createCalls  int
+	updateErr    error
 }
 
 func (repository *memoryUsers) Create(_ context.Context, user *domain.User) error {
@@ -568,6 +569,9 @@ func (repository *memoryUsers) LinkGoogleSubject(_ context.Context, id domain.ID
 }
 
 func (repository *memoryUsers) Update(_ context.Context, user *domain.User) error {
+	if repository.updateErr != nil {
+		return repository.updateErr
+	}
 	copyOfUser := *user
 	repository.stored[user.ID] = &copyOfUser
 	return nil
