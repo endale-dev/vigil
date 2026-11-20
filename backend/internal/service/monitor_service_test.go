@@ -251,10 +251,16 @@ func TestMonitorServiceDeleteHidesOtherOwnersAndStopsOnHistoryErrors(t *testing.
 }
 
 type memoryMonitors struct {
-	items     map[domain.ID]domain.Monitor
-	countErr  error
-	createErr error
-	updateErr error
+	items           map[domain.ID]domain.Monitor
+	countErr        error
+	createErr       error
+	updateErr       error
+	resultErr       error
+	resultID        domain.ID
+	claimToken      string
+	resultStatus    domain.Status
+	resultFailures  int
+	resultCheckedAt time.Time
 }
 
 func TestMonitorServicePauseAndResume(t *testing.T) {
@@ -386,6 +392,8 @@ func TestMonitorServicePropagatesUptimeErrors(t *testing.T) {
 
 type memoryChecks struct {
 	deleted       []domain.ID
+	inserted      []domain.Check
+	insertErr     error
 	lastLimit     int
 	err           error
 	uptimeResults []domain.Uptime
@@ -393,7 +401,13 @@ type memoryChecks struct {
 	uptimeErr     error
 }
 
-func (*memoryChecks) Insert(context.Context, *domain.Check) error { return nil }
+func (repository *memoryChecks) Insert(_ context.Context, check *domain.Check) error {
+	if repository.insertErr != nil {
+		return repository.insertErr
+	}
+	repository.inserted = append(repository.inserted, *check)
+	return nil
+}
 
 func (repository *memoryChecks) ListByMonitor(_ context.Context, _ domain.ID, limit int) ([]domain.Check, error) {
 	repository.lastLimit = limit
@@ -519,7 +533,15 @@ func (*memoryMonitors) ClaimDue(context.Context, time.Time) (*domain.MonitorClai
 	return nil, nil
 }
 
-func (*memoryMonitors) RecordResult(context.Context, domain.ID, string, domain.Status, int, time.Time) error {
+func (repository *memoryMonitors) RecordResult(_ context.Context, id domain.ID, claimToken string, status domain.Status, failures int, checkedAt time.Time) error {
+	if repository.resultErr != nil {
+		return repository.resultErr
+	}
+	repository.resultID = id
+	repository.claimToken = claimToken
+	repository.resultStatus = status
+	repository.resultFailures = failures
+	repository.resultCheckedAt = checkedAt
 	return nil
 }
 
