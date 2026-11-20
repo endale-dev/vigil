@@ -11,16 +11,18 @@ import (
 )
 
 type MonitorService struct {
-	monitors domain.MonitorRepository
-	clock    Clock
-	limit    int
+	monitors  domain.MonitorRepository
+	checks    domain.CheckRepository
+	incidents domain.IncidentRepository
+	clock     Clock
+	limit     int
 }
 
-func NewMonitorService(monitors domain.MonitorRepository, clock Clock, limit int) (*MonitorService, error) {
-	if monitors == nil || clock == nil || limit < 1 {
+func NewMonitorService(monitors domain.MonitorRepository, checks domain.CheckRepository, incidents domain.IncidentRepository, clock Clock, limit int) (*MonitorService, error) {
+	if monitors == nil || checks == nil || incidents == nil || clock == nil || limit < 1 {
 		return nil, errors.New("monitor service dependencies are incomplete")
 	}
-	return &MonitorService{monitors: monitors, clock: clock, limit: limit}, nil
+	return &MonitorService{monitors: monitors, checks: checks, incidents: incidents, clock: clock, limit: limit}, nil
 }
 
 func (monitors *MonitorService) Create(ctx context.Context, ownerID domain.ID, draft domain.Monitor) (*domain.Monitor, error) {
@@ -103,4 +105,17 @@ func (monitors *MonitorService) Update(ctx context.Context, ownerID, monitorID d
 		return nil, err
 	}
 	return monitor, nil
+}
+
+func (monitors *MonitorService) Delete(ctx context.Context, ownerID, monitorID domain.ID) error {
+	if _, err := monitors.Get(ctx, ownerID, monitorID); err != nil {
+		return err
+	}
+	if err := monitors.checks.DeleteByMonitor(ctx, monitorID); err != nil {
+		return err
+	}
+	if err := monitors.incidents.DeleteByMonitor(ctx, monitorID); err != nil {
+		return err
+	}
+	return monitors.monitors.Delete(ctx, monitorID)
 }

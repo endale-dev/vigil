@@ -11,10 +11,10 @@ import (
 )
 
 func TestNewMonitorServiceRejectsIncompleteDependencies(t *testing.T) {
-	if monitors, err := NewMonitorService(nil, &fixedServiceClock{now: time.Now()}, 1); err == nil || monitors != nil {
+	if monitors, err := NewMonitorService(nil, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 1); err == nil || monitors != nil {
 		t.Fatalf("NewMonitorService() = (%v, %v), want dependency error", monitors, err)
 	}
-	if monitors, err := NewMonitorService(&memoryMonitors{}, &fixedServiceClock{now: time.Now()}, 0); err == nil || monitors != nil {
+	if monitors, err := NewMonitorService(&memoryMonitors{}, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 0); err == nil || monitors != nil {
 		t.Fatalf("NewMonitorService(limit=0) = (%v, %v), want dependency error", monitors, err)
 	}
 }
@@ -22,7 +22,7 @@ func TestNewMonitorServiceRejectsIncompleteDependencies(t *testing.T) {
 func TestMonitorServiceCreatesMonitorWithDefaults(t *testing.T) {
 	clock := &fixedServiceClock{now: time.Date(2026, time.July, 8, 9, 10, 11, 0, time.UTC)}
 	repository := &memoryMonitors{}
-	monitors, err := NewMonitorService(repository, clock, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, clock, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestMonitorServiceCreatesMonitorWithDefaults(t *testing.T) {
 
 func TestMonitorServiceCreatesTLSMonitorWithWarningDefault(t *testing.T) {
 	repository := &memoryMonitors{}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestMonitorServiceEnforcesOwnerLimitAndValidation(t *testing.T) {
 	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
 		"existing": {ID: "existing", OwnerID: "owner-1"},
 	}}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 1)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestMonitorServiceEnforcesOwnerLimitAndValidation(t *testing.T) {
 func TestMonitorServicePropagatesCountAndCreateFailures(t *testing.T) {
 	want := errors.New("repository unavailable")
 	repository := &memoryMonitors{countErr: want}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestMonitorServiceListAndGetAreOwnerScoped(t *testing.T) {
 		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1"},
 		"monitor-2": {ID: "monitor-2", OwnerID: "owner-2"},
 	}}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestMonitorServiceUpdateResetsStateWhenTargetChanges(t *testing.T) {
 		CreatedAt: now.Add(-time.Hour), LastCheckedAt: now.Add(-time.Minute),
 	}
 	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{"monitor-1": existing}}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: now}, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: now}, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestMonitorServiceUpdatePreservesStatusWithoutTargetChange(t *testing.T) {
 		Status: domain.StatusDown, ConsecutiveFailures: 3,
 	}
 	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{existing.ID: existing}}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestMonitorServiceUpdateHidesOtherOwnersAndRejectsInvalidChanges(t *testing
 		Target: "https://example.test", Interval: time.Minute, Timeout: 10 * time.Second,
 	}
 	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{existing.ID: existing}}
-	monitors, err := NewMonitorService(repository, &fixedServiceClock{now: time.Now()}, 25)
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: time.Now()}, 25)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,11 +197,108 @@ func TestMonitorServiceUpdateHidesOtherOwnersAndRejectsInvalidChanges(t *testing
 	}
 }
 
+func TestMonitorServiceDeleteRemovesOwnedMonitorAndHistory(t *testing.T) {
+	monitor := domain.Monitor{ID: "monitor-1", OwnerID: "owner-1"}
+	monitorsRepository := &memoryMonitors{items: map[domain.ID]domain.Monitor{monitor.ID: monitor}}
+	checks := &memoryChecks{}
+	incidents := &memoryIncidents{}
+	monitors, err := NewMonitorService(monitorsRepository, checks, incidents, &fixedServiceClock{now: time.Now()}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := monitors.Delete(context.Background(), "owner-1", monitor.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if len(checks.deleted) != 1 || checks.deleted[0] != monitor.ID || len(incidents.deleted) != 1 || incidents.deleted[0] != monitor.ID {
+		t.Fatalf("deleted checks/incidents = %v/%v", checks.deleted, incidents.deleted)
+	}
+	if _, ok := monitorsRepository.items[monitor.ID]; ok {
+		t.Fatal("monitor was not deleted")
+	}
+}
+
+func TestMonitorServiceDeleteHidesOtherOwnersAndStopsOnHistoryErrors(t *testing.T) {
+	for _, failure := range []string{"checks", "incidents"} {
+		t.Run(failure, func(t *testing.T) {
+			monitor := domain.Monitor{ID: "monitor-1", OwnerID: "owner-1"}
+			monitorsRepository := &memoryMonitors{items: map[domain.ID]domain.Monitor{monitor.ID: monitor}}
+			checks := &memoryChecks{}
+			incidents := &memoryIncidents{}
+			want := errors.New("history delete failed")
+			if failure == "checks" {
+				checks.err = want
+			} else {
+				incidents.err = want
+			}
+			monitors, err := NewMonitorService(monitorsRepository, checks, incidents, &fixedServiceClock{now: time.Now()}, 25)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := monitors.Delete(context.Background(), "owner-2", monitor.ID); err != apperrors.ErrNotFound {
+				t.Fatalf("Delete(other owner) error = %v, want ErrNotFound", err)
+			}
+			if len(checks.deleted) != 0 || len(incidents.deleted) != 0 || len(monitorsRepository.items) != 1 {
+				t.Fatal("unauthorized delete changed monitor history")
+			}
+			if err := monitors.Delete(context.Background(), "owner-1", monitor.ID); !errors.Is(err, want) {
+				t.Fatalf("Delete() error = %v, want %v", err, want)
+			}
+			if _, ok := monitorsRepository.items[monitor.ID]; !ok {
+				t.Fatal("monitor deleted after history deletion failed")
+			}
+		})
+	}
+}
+
 type memoryMonitors struct {
 	items     map[domain.ID]domain.Monitor
 	countErr  error
 	createErr error
 	updateErr error
+}
+
+type memoryChecks struct {
+	deleted []domain.ID
+	err     error
+}
+
+func (*memoryChecks) Insert(context.Context, *domain.Check) error { return nil }
+
+func (*memoryChecks) ListByMonitor(context.Context, domain.ID, int) ([]domain.Check, error) {
+	return nil, nil
+}
+
+func (*memoryChecks) UptimeSince(context.Context, domain.ID, time.Time) (domain.Uptime, error) {
+	return domain.Uptime{}, nil
+}
+
+func (repository *memoryChecks) DeleteByMonitor(_ context.Context, id domain.ID) error {
+	if repository.err != nil {
+		return repository.err
+	}
+	repository.deleted = append(repository.deleted, id)
+	return nil
+}
+
+type memoryIncidents struct {
+	deleted []domain.ID
+	err     error
+}
+
+func (*memoryIncidents) Open(context.Context, *domain.Incident) error { return nil }
+
+func (*memoryIncidents) Resolve(context.Context, domain.ID, time.Time) error { return nil }
+
+func (*memoryIncidents) ListByMonitor(context.Context, domain.ID, int) ([]domain.Incident, error) {
+	return nil, nil
+}
+
+func (repository *memoryIncidents) DeleteByMonitor(_ context.Context, id domain.ID) error {
+	if repository.err != nil {
+		return repository.err
+	}
+	repository.deleted = append(repository.deleted, id)
+	return nil
 }
 
 func (repository *memoryMonitors) Create(_ context.Context, monitor *domain.Monitor) error {
@@ -285,3 +382,5 @@ func (*memoryMonitors) RecordResult(context.Context, domain.ID, string, domain.S
 }
 
 var _ domain.MonitorRepository = (*memoryMonitors)(nil)
+var _ domain.CheckRepository = (*memoryChecks)(nil)
+var _ domain.IncidentRepository = (*memoryIncidents)(nil)
