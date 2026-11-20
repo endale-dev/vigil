@@ -5,34 +5,42 @@ STATICCHECK_VERSION ?= 2026.2.2
 DEADCODE_VERSION ?= v0.50.0
 GO_SOURCES := $(wildcard backend/*.go backend/internal/*/*.go backend/internal/*/*/*.go backend/internal/*/*/*/*.go)
 
-.PHONY: test build run lint deadcode check web docker
+.PHONY: backend-module test build run lint deadcode check web docker
 
-test:
-	$(if $(GO_SOURCES),,$(error No Go source files exist yet; add a Go package before running tests))
-	$(GO) test -race ./...
-
-build:
-	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; the application entry point has not been added yet))
-ifeq ($(OS),Windows_NT)
-	@if not exist bin mkdir bin
-	$(GO) build -o bin/vigil.exe ./backend
-else
-	@mkdir -p bin
-	$(GO) build -o bin/vigil ./backend
+backend-module:
+ifeq ($(wildcard backend/go.mod),)
+	$(GO) -C backend mod init github.com/endale-dev/vigil
+	$(GO) -C backend mod edit -go=1.26
+	$(GO) -C backend get go.mongodb.org/mongo-driver/v2@v2.10.1
+	$(GO) -C backend mod tidy
 endif
 
-run:
+test: backend-module
+	$(if $(GO_SOURCES),,$(error No Go source files exist yet; add a Go package before running tests))
+	$(GO) -C backend test -race ./...
+
+build: backend-module
 	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; the application entry point has not been added yet))
-	$(GO) run ./backend
+ifeq ($(OS),Windows_NT)
+	@if not exist backend\bin mkdir backend\bin
+	$(GO) -C backend build -o bin/vigil.exe .
+else
+	@mkdir -p backend/bin
+	$(GO) -C backend build -o bin/vigil .
+endif
 
-lint:
+run: backend-module
+	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; the application entry point has not been added yet))
+	$(GO) -C backend run .
+
+lint: backend-module
 	$(if $(GO_SOURCES),,$(error No Go source files exist yet; add a Go package before linting))
-	$(GO) vet ./...
-	$(GO) run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
+	$(GO) -C backend vet ./...
+	$(GO) -C backend run honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION) ./...
 
-deadcode:
+deadcode: backend-module
 	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; dead-code analysis needs an executable package))
-	$(GO) run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION) -test ./...
+	$(GO) -C backend run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION) -test ./...
 
 check: test build lint deadcode web
 
@@ -43,5 +51,5 @@ web:
 	$(NPM) --prefix frontend run build
 
 docker:
-	$(if $(wildcard Dockerfile),,$(error Dockerfile is missing; container packaging has not been added yet))
-	$(DOCKER) build -t vigil:local .
+	$(if $(wildcard backend/Dockerfile),,$(error backend/Dockerfile is missing; container packaging has not been added yet))
+	$(DOCKER) build -f backend/Dockerfile -t vigil:local .

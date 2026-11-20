@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/endale-dev/vigil/backend/internal/domain"
+	"github.com/endale-dev/vigil/internal/domain"
 )
 
 type Clock interface {

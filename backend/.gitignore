@@ -1,0 +1,6 @@
+﻿/go.mod
+/go.sum
+/.env
+/.env.*
+!/.env.example
+/bin/
