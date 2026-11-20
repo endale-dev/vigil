@@ -34,4 +34,5 @@ type Monitor struct {
 	ConsecutiveFailures int
 	LastCheckedAt       time.Time
 	NextCheckAt         time.Time
+	CreatedAt           time.Time
 }
