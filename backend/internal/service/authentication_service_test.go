@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +26,34 @@ func TestNewAuthenticationServiceRejectsIncompleteDependencies(t *testing.T) {
 func TestNormalizeEmail(t *testing.T) {
 	if got, want := normalizeEmail("  USER@Example.Test  "), "user@example.test"; got != want {
 		t.Fatalf("normalizeEmail() = %q, want %q", got, want)
+	}
+}
+
+func TestAuthenticationServiceStartGoogleLoginGeneratesStateAndPKCE(t *testing.T) {
+	auth, _, _, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	provider := &fixedGoogleProvider{authorizationURL: "https://accounts.google.test/authorize"}
+	auth.dependencies.Google = provider
+	result, err := auth.StartGoogleLogin()
+	if err != nil {
+		t.Fatalf("StartGoogleLogin() error = %v", err)
+	}
+	if result.AuthorizationURL != provider.authorizationURL || result.State == "" || result.CodeVerifier == "" {
+		t.Fatalf("StartGoogleLogin() = %+v", result)
+	}
+	if len(result.State) != 43 || len(result.CodeVerifier) != 43 || provider.state != result.State {
+		t.Fatalf("OAuth state/verifier/provider state = %q/%q/%q", result.State, result.CodeVerifier, provider.state)
+	}
+	hash := sha256.Sum256([]byte(result.CodeVerifier))
+	wantChallenge := base64.RawURLEncoding.EncodeToString(hash[:])
+	if provider.challenge != wantChallenge {
+		t.Fatalf("provider challenge = %q, want %q", provider.challenge, wantChallenge)
+	}
+}
+
+func TestAuthenticationServiceStartGoogleLoginRejectsDisabledProvider(t *testing.T) {
+	auth, _, _, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	if result, err := auth.StartGoogleLogin(); err != apperrors.ErrProviderDisabled || result.AuthorizationURL != "" {
+		t.Fatalf("StartGoogleLogin() = (%+v, %v), want disabled-provider error", result, err)
 	}
 }
 
@@ -360,6 +390,22 @@ func (*fixedTokens) Hash(raw string) string {
 type fixedMailer struct {
 	messages []Mail
 	err      error
+}
+
+type fixedGoogleProvider struct {
+	authorizationURL string
+	state            string
+	challenge        string
+}
+
+func (provider *fixedGoogleProvider) AuthURL(state, challenge string) string {
+	provider.state = state
+	provider.challenge = challenge
+	return provider.authorizationURL
+}
+
+func (*fixedGoogleProvider) Exchange(context.Context, string, string) (GoogleIdentity, error) {
+	return GoogleIdentity{}, errors.New("not implemented")
 }
 
 func (mailer *fixedMailer) Send(_ context.Context, message Mail) error {

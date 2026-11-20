@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base32"
+	"encoding/base64"
 	"errors"
 	"log/slog"
 	"net/url"
@@ -42,6 +44,12 @@ type AuthenticatedSession struct {
 	Session domain.Session
 }
 
+type GoogleLoginStart struct {
+	AuthorizationURL string
+	State            string
+	CodeVerifier     string
+}
+
 func NewAuthenticationService(dependencies AuthenticationDependencies) (*AuthenticationService, error) {
 	if dependencies.Users == nil || dependencies.Sessions == nil || dependencies.PasswordResets == nil ||
 		dependencies.Passwords == nil || dependencies.Tokens == nil || dependencies.Mailer == nil ||
@@ -54,6 +62,31 @@ func NewAuthenticationService(dependencies AuthenticationDependencies) (*Authent
 
 func normalizeEmail(email string) string {
 	return domain.NormalizeEmail(email)
+}
+
+func (auth *AuthenticationService) StartGoogleLogin() (GoogleLoginStart, error) {
+	if auth.dependencies.Google == nil {
+		return GoogleLoginStart{}, apperrors.ErrProviderDisabled
+	}
+	state, err := newOAuthToken(32)
+	if err != nil {
+		return GoogleLoginStart{}, err
+	}
+	verifier, err := newOAuthToken(32)
+	if err != nil {
+		return GoogleLoginStart{}, err
+	}
+	challengeBytes := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(challengeBytes[:])
+	authorizationURL := auth.dependencies.Google.AuthURL(state, challenge)
+	if authorizationURL == "" {
+		return GoogleLoginStart{}, errors.New("Google authorization URL unavailable")
+	}
+	return GoogleLoginStart{
+		AuthorizationURL: authorizationURL,
+		State:            state,
+		CodeVerifier:     verifier,
+	}, nil
 }
 
 func (auth *AuthenticationService) Register(ctx context.Context, name, email, password string) (AuthenticationResult, error) {
@@ -262,4 +295,12 @@ func newStatusSlug() (string, error) {
 	}
 	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(random[:])
 	return strings.ToLower(encoded[:10]), nil
+}
+
+func newOAuthToken(size int) (string, error) {
+	random := make([]byte, size)
+	if _, err := rand.Read(random); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(random), nil
 }
