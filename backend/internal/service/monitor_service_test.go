@@ -393,6 +393,7 @@ func TestMonitorServicePropagatesUptimeErrors(t *testing.T) {
 type memoryChecks struct {
 	deleted       []domain.ID
 	inserted      []domain.Check
+	listedChecks  []domain.Check
 	insertErr     error
 	lastLimit     int
 	err           error
@@ -411,7 +412,7 @@ func (repository *memoryChecks) Insert(_ context.Context, check *domain.Check) e
 
 func (repository *memoryChecks) ListByMonitor(_ context.Context, _ domain.ID, limit int) ([]domain.Check, error) {
 	repository.lastLimit = limit
-	return nil, nil
+	return append([]domain.Check(nil), repository.listedChecks...), nil
 }
 
 func (repository *memoryChecks) UptimeSince(_ context.Context, _ domain.ID, since time.Time) (domain.Uptime, error) {

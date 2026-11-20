@@ -547,7 +547,13 @@ func (repository *memoryUsers) GetByGoogleSub(_ context.Context, sub string) (*d
 	return nil, apperrors.ErrNotFound
 }
 
-func (*memoryUsers) GetBySlug(context.Context, string) (*domain.User, error) {
+func (repository *memoryUsers) GetBySlug(_ context.Context, slug string) (*domain.User, error) {
+	for _, user := range repository.stored {
+		if user.StatusSlug == slug {
+			copyOfUser := *user
+			return &copyOfUser, nil
+		}
+	}
 	return nil, apperrors.ErrNotFound
 }
 
