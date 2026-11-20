@@ -174,6 +174,42 @@ func (repository *monitorRepository) ClaimDue(ctx context.Context, now time.Time
 	return &domain.MonitorClaim{Monitor: *before.toDomain(), ClaimToken: token}, nil
 }
 
+func (repository *monitorRepository) RecordResult(ctx context.Context, id domain.ID, claimToken string, status domain.Status, failures int, checkedAt time.Time) error {
+	objectID, err := idToObjectID(id)
+	if err != nil {
+		return err
+	}
+	filter := bson.D{
+		{Key: "_id", Value: objectID},
+		{Key: "claimToken", Value: claimToken},
+	}
+	pipeline := driver.Pipeline{
+		bson.D{{Key: "$set", Value: bson.D{
+			{Key: "status", Value: status},
+			{Key: "consecutiveFailures", Value: failures},
+			{Key: "lastCheckedAt", Value: checkedAt},
+			{Key: "nextCheckAt", Value: bson.D{{Key: "$dateAdd", Value: bson.D{
+				{Key: "startDate", Value: checkedAt},
+				{Key: "unit", Value: "second"},
+				{Key: "amount", Value: "$intervalSeconds"},
+			}}}},
+		}}},
+		bson.D{{Key: "$unset", Value: bson.A{"leaseUntil", "claimToken"}}},
+	}
+	result, err := repository.collection.UpdateOne(ctx, filter, pipeline)
+	if err != nil {
+		return mapError(err)
+	}
+	if result.MatchedCount == 0 {
+		var document monitorDocument
+		if err := repository.collection.FindOne(ctx, bson.D{{Key: "_id", Value: objectID}}).Decode(&document); err != nil {
+			return mapError(err)
+		}
+		return domain.ErrInvalidToken
+	}
+	return nil
+}
+
 func newClaimToken() (string, error) {
 	var raw [32]byte
 	if _, err := rand.Read(raw[:]); err != nil {
@@ -181,6 +217,8 @@ func newClaimToken() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
+
+var _ domain.MonitorRepository = (*monitorRepository)(nil)
 
 func (repository *monitorRepository) list(ctx context.Context, filter bson.D) ([]domain.Monitor, error) {
 	cursor, err := repository.collection.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
