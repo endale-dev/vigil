@@ -2,6 +2,9 @@ package mongo
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/endale-dev/vigil/internal/domain"
@@ -34,6 +37,8 @@ type monitorDocument struct {
 type monitorRepository struct {
 	collection *driver.Collection
 }
+
+const claimLeaseDuration = 35 * time.Second
 
 func NewMonitorRepository(database *driver.Database) *monitorRepository {
 	return &monitorRepository{collection: database.Collection("monitors")}
@@ -140,6 +145,41 @@ func (repository *monitorRepository) Delete(ctx context.Context, id domain.ID) e
 		return domain.ErrNotFound
 	}
 	return nil
+}
+
+func (repository *monitorRepository) ClaimDue(ctx context.Context, now time.Time) (*domain.MonitorClaim, error) {
+	token, err := newClaimToken()
+	if err != nil {
+		return nil, err
+	}
+	filter := bson.D{
+		{Key: "enabled", Value: true},
+		{Key: "nextCheckAt", Value: bson.D{{Key: "$lte", Value: now}}},
+		{Key: "$or", Value: bson.A{
+			bson.D{{Key: "leaseUntil", Value: bson.D{{Key: "$exists", Value: false}}}},
+			bson.D{{Key: "leaseUntil", Value: bson.D{{Key: "$lte", Value: now}}}},
+		}},
+	}
+	update := bson.D{{Key: "$set", Value: bson.D{
+		{Key: "leaseUntil", Value: now.Add(claimLeaseDuration)},
+		{Key: "claimToken", Value: token},
+	}}}
+	var before monitorDocument
+	err = repository.collection.FindOneAndUpdate(ctx, filter, update,
+		options.FindOneAndUpdate().SetSort(bson.D{{Key: "nextCheckAt", Value: 1}, {Key: "_id", Value: 1}}).SetReturnDocument(options.Before),
+	).Decode(&before)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return &domain.MonitorClaim{Monitor: *before.toDomain(), ClaimToken: token}, nil
+}
+
+func newClaimToken() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("generate monitor claim token: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw[:]), nil
 }
 
 func (repository *monitorRepository) list(ctx context.Context, filter bson.D) ([]domain.Monitor, error) {
