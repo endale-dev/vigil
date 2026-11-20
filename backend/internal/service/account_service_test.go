@@ -93,3 +93,62 @@ func TestAccountServicePropagatesRepositoryFailures(t *testing.T) {
 		t.Fatalf("UpdateNotifications() error = %v, want %v", err, want)
 	}
 }
+
+func TestAccountServiceSendsTestAlertOnlyThroughRequestedChannel(t *testing.T) {
+	users := &memoryUsers{stored: map[domain.ID]*domain.User{
+		"user-1": {ID: "user-1", Notify: domain.NotifySettings{EmailAlerts: true, TelegramChatID: "12345"}},
+	}}
+	email := &fixedNotifier{channel: domain.ChannelEmail, enabled: true}
+	telegram := &fixedNotifier{channel: domain.ChannelTelegram, enabled: true}
+	account, err := NewAccountService(users, true, email, telegram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := account.SendTestAlert(context.Background(), "user-1", domain.ChannelEmail); err != nil {
+		t.Fatalf("SendTestAlert() error = %v", err)
+	}
+	if email.calls != 1 || telegram.calls != 0 || len(email.alerts) != 1 || email.alerts[0].Status != domain.StatusDown {
+		t.Fatalf("email/Telegram calls = %d/%d, email alerts = %+v", email.calls, telegram.calls, email.alerts)
+	}
+}
+
+func TestAccountServiceRejectsUnknownUnavailableAndDisabledTestAlerts(t *testing.T) {
+	users := &memoryUsers{stored: map[domain.ID]*domain.User{
+		"user-1": {ID: "user-1", Notify: domain.NotifySettings{EmailAlerts: false}},
+	}}
+	disabledEmail := &fixedNotifier{channel: domain.ChannelEmail}
+	account, err := NewAccountService(users, false, disabledEmail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := account.SendTestAlert(context.Background(), "user-1", domain.Channel("sms")); err == nil {
+		t.Fatal("SendTestAlert() accepted an unknown channel")
+	}
+	if err := account.SendTestAlert(context.Background(), "user-1", domain.ChannelTelegram); err != apperrors.ErrProviderDisabled {
+		t.Fatalf("unavailable notifier error = %v, want ErrProviderDisabled", err)
+	}
+	if err := account.SendTestAlert(context.Background(), "user-1", domain.ChannelEmail); err != apperrors.ErrProviderDisabled {
+		t.Fatalf("disabled notifier error = %v, want ErrProviderDisabled", err)
+	}
+	if disabledEmail.calls != 0 {
+		t.Fatalf("disabled notifier was called %d times", disabledEmail.calls)
+	}
+}
+
+type fixedNotifier struct {
+	channel domain.Channel
+	enabled bool
+	calls   int
+	alerts  []Alert
+	err     error
+}
+
+func (notifier *fixedNotifier) Name() domain.Channel { return notifier.channel }
+
+func (notifier *fixedNotifier) Enabled(domain.User) bool { return notifier.enabled }
+
+func (notifier *fixedNotifier) Notify(_ context.Context, _ domain.User, alert Alert) error {
+	notifier.calls++
+	notifier.alerts = append(notifier.alerts, alert)
+	return notifier.err
+}

@@ -11,13 +11,25 @@ import (
 type AccountService struct {
 	users           domain.UserRepository
 	telegramEnabled bool
+	notifiers       map[domain.Channel]Notifier
 }
 
-func NewAccountService(users domain.UserRepository, telegramEnabled bool) (*AccountService, error) {
+func NewAccountService(users domain.UserRepository, telegramEnabled bool, notifiers ...Notifier) (*AccountService, error) {
 	if users == nil {
 		return nil, errors.New("account service user repository is required")
 	}
-	return &AccountService{users: users, telegramEnabled: telegramEnabled}, nil
+	account := &AccountService{
+		users:           users,
+		telegramEnabled: telegramEnabled,
+		notifiers:       make(map[domain.Channel]Notifier, len(notifiers)),
+	}
+	for _, notifier := range notifiers {
+		if notifier == nil || account.notifiers[notifier.Name()] != nil {
+			return nil, errors.New("account service notifiers are invalid")
+		}
+		account.notifiers[notifier.Name()] = notifier
+	}
+	return account, nil
 }
 
 func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings) error {
@@ -63,4 +75,26 @@ func (account *AccountService) UpdateStatusSlug(ctx context.Context, userID doma
 	}
 	user.StatusSlug = slug
 	return account.users.Update(ctx, user)
+}
+
+func (account *AccountService) SendTestAlert(ctx context.Context, userID domain.ID, channel domain.Channel) error {
+	if channel != domain.ChannelEmail && channel != domain.ChannelTelegram {
+		return apperrors.ValidationError{Field: "channel", Message: "is invalid"}
+	}
+	notifier := account.notifiers[channel]
+	if notifier == nil {
+		return apperrors.ErrProviderDisabled
+	}
+	user, err := account.users.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !notifier.Enabled(*user) {
+		return apperrors.ErrProviderDisabled
+	}
+	return notifier.Notify(ctx, *user, Alert{
+		Monitor: domain.Monitor{Name: "Vigil test alert", Target: "Vigil"},
+		Status:  domain.StatusDown,
+		Detail:  "This is a test alert from Vigil.",
+	})
 }
