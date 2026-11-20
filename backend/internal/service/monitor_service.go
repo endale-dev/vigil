@@ -119,3 +119,22 @@ func (monitors *MonitorService) Delete(ctx context.Context, ownerID, monitorID d
 	}
 	return monitors.monitors.Delete(ctx, monitorID)
 }
+
+func (monitors *MonitorService) Pause(ctx context.Context, ownerID, monitorID domain.ID) error {
+	monitor, err := monitors.Get(ctx, ownerID, monitorID)
+	if err != nil {
+		return err
+	}
+	monitor.Enabled = false
+	return monitors.monitors.Update(ctx, monitor)
+}
+
+func (monitors *MonitorService) Resume(ctx context.Context, ownerID, monitorID domain.ID) error {
+	monitor, err := monitors.Get(ctx, ownerID, monitorID)
+	if err != nil {
+		return err
+	}
+	monitor.Enabled = true
+	monitor.NextCheckAt = monitors.clock.Now()
+	return monitors.monitors.Update(ctx, monitor)
+}

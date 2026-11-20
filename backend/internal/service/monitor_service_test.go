@@ -257,6 +257,33 @@ type memoryMonitors struct {
 	updateErr error
 }
 
+func TestMonitorServicePauseAndResume(t *testing.T) {
+	now := time.Date(2026, time.September, 10, 11, 12, 13, 0, time.UTC)
+	originalDue := now.Add(time.Hour)
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1", Enabled: true, NextCheckAt: originalDue},
+	}}
+	monitors, err := NewMonitorService(repository, &memoryChecks{}, &memoryIncidents{}, &fixedServiceClock{now: now}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := monitors.Pause(context.Background(), "owner-1", "monitor-1"); err != nil {
+		t.Fatalf("Pause() error = %v", err)
+	}
+	if repository.items["monitor-1"].Enabled || !repository.items["monitor-1"].NextCheckAt.Equal(originalDue) {
+		t.Fatalf("paused monitor = %+v", repository.items["monitor-1"])
+	}
+	if err := monitors.Resume(context.Background(), "owner-1", "monitor-1"); err != nil {
+		t.Fatalf("Resume() error = %v", err)
+	}
+	if !repository.items["monitor-1"].Enabled || !repository.items["monitor-1"].NextCheckAt.Equal(now) {
+		t.Fatalf("resumed monitor = %+v", repository.items["monitor-1"])
+	}
+	if err := monitors.Pause(context.Background(), "owner-2", "monitor-1"); err != apperrors.ErrNotFound {
+		t.Fatalf("Pause(other owner) error = %v, want ErrNotFound", err)
+	}
+}
+
 type memoryChecks struct {
 	deleted []domain.ID
 	err     error
