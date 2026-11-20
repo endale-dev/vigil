@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"strings"
 	"testing"
 )
 
@@ -53,7 +52,7 @@ func TestAddressGuardValidatesAllAnswersBeforeDial(t *testing.T) {
 	}
 
 	_, err := guard.dialContext(context.Background(), "tcp", "example.test:443")
-	if err == nil || err.Error() != "target address not allowed" {
+	if !errors.Is(err, errTargetAddressNotAllowed) {
 		t.Fatalf("dialContext() error = %v, want target address not allowed", err)
 	}
 	if len(dialer.addresses) != 0 {
@@ -123,9 +122,6 @@ type recordingDialer struct {
 
 func (dialer *recordingDialer) DialContext(_ context.Context, _, address string) (net.Conn, error) {
 	dialer.addresses = append(dialer.addresses, address)
-	if strings.HasSuffix(address, ":0") {
-		return nil, errors.New("invalid port")
-	}
 	client, server := net.Pipe()
 	server.Close()
 	return client, nil

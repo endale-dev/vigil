@@ -24,6 +24,8 @@ type addressGuard struct {
 	dialer       contextDialer
 }
 
+var errTargetAddressNotAllowed = errors.New("target address not allowed")
+
 func newAddressGuard(allowPrivate bool) *addressGuard {
 	return &addressGuard{
 		allowPrivate: allowPrivate,
@@ -42,20 +44,9 @@ func (guard *addressGuard) dialContext(ctx context.Context, network, address str
 		return nil, errors.New("invalid target port")
 	}
 
-	addresses, err := guard.resolver.LookupIPAddr(ctx, host)
+	addresses, err := guard.resolve(ctx, host)
 	if err != nil {
-		return nil, fmt.Errorf("resolve target: %w", err)
-	}
-	if len(addresses) == 0 {
-		return nil, errors.New("target address not allowed")
-	}
-	for _, address := range addresses {
-		if !guard.allowPrivate && isRestrictedAddress(address.IP) {
-			return nil, errors.New("target address not allowed")
-		}
-		if _, ok := netip.AddrFromSlice(address.IP); !ok {
-			return nil, errors.New("target address not allowed")
-		}
+		return nil, err
 	}
 
 	var lastErr error
@@ -67,6 +58,28 @@ func (guard *addressGuard) dialContext(ctx context.Context, network, address str
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+func (guard *addressGuard) resolve(ctx context.Context, host string) ([]net.IPAddr, error) {
+	if host == "" {
+		return nil, errTargetAddressNotAllowed
+	}
+	addresses, err := guard.resolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve target: %w", err)
+	}
+	if len(addresses) == 0 {
+		return nil, errTargetAddressNotAllowed
+	}
+	for _, address := range addresses {
+		if !guard.allowPrivate && isRestrictedAddress(address.IP) {
+			return nil, errTargetAddressNotAllowed
+		}
+		if _, ok := netip.AddrFromSlice(address.IP); !ok {
+			return nil, errTargetAddressNotAllowed
+		}
+	}
+	return addresses, nil
 }
 
 func isRestrictedAddress(ip net.IP) bool {
