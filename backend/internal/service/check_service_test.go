@@ -17,7 +17,8 @@ func TestCheckServiceRunPersistsCheckAndClaimedResult(t *testing.T) {
 	monitors := &memoryMonitors{}
 	checks := &memoryChecks{}
 	prober := &fixedProber{result: ProbeResult{Up: true, Latency: 125 * time.Millisecond, Detail: "HTTP 200"}}
-	service, err := NewCheckService(monitors, checks, prober, &fixedServiceClock{now: now}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	incidents := &memoryIncidents{}
+	service, err := NewCheckService(monitors, checks, incidents, prober, &fixedServiceClock{now: now}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestCheckServiceRunDoesNotRecordResultWhenCheckInsertFails(t *testing.T) {
 	want := errors.New("check store unavailable")
 	monitors := &memoryMonitors{}
 	checks := &memoryChecks{insertErr: want}
-	service, err := NewCheckService(monitors, checks, &fixedProber{result: ProbeResult{Up: true}}, &fixedServiceClock{now: time.Now()}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	service, err := NewCheckService(monitors, checks, &memoryIncidents{}, &fixedProber{result: ProbeResult{Up: true}}, &fixedServiceClock{now: time.Now()}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +56,8 @@ func TestCheckServiceRunReturnsResultPersistenceFailure(t *testing.T) {
 	want := errors.New("claim expired")
 	monitors := &memoryMonitors{resultErr: want}
 	checks := &memoryChecks{}
-	service, err := NewCheckService(monitors, checks, &fixedProber{result: ProbeResult{Up: false}}, &fixedServiceClock{now: time.Now()}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	incidents := &memoryIncidents{}
+	service, err := NewCheckService(monitors, checks, incidents, &fixedProber{result: ProbeResult{Up: false}}, &fixedServiceClock{now: time.Now()}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,6 +66,50 @@ func TestCheckServiceRunReturnsResultPersistenceFailure(t *testing.T) {
 	}
 	if len(checks.inserted) != 1 {
 		t.Fatalf("checks inserted = %d, want 1", len(checks.inserted))
+	}
+	if len(incidents.opened) != 0 || len(incidents.resolved) != 0 {
+		t.Fatal("incident changed after monitor result persistence failed")
+	}
+}
+
+func TestCheckServiceOpensAndResolvesIncidentsAfterResultPersistence(t *testing.T) {
+	now := time.Date(2026, time.December, 13, 14, 15, 16, 0, time.UTC)
+	incidents := &memoryIncidents{}
+	clock := &fixedServiceClock{now: now}
+	monitors := &memoryMonitors{}
+	checks := &memoryChecks{}
+	service, err := NewCheckService(monitors, checks, incidents, &fixedProber{result: ProbeResult{Detail: "connection refused"}}, clock, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	down := domain.Monitor{ID: "monitor-1", Status: domain.StatusUp, ConsecutiveFailures: 1}
+	if err := service.Run(context.Background(), down, "claim-down"); err != nil {
+		t.Fatalf("Run(down) error = %v", err)
+	}
+	if len(incidents.opened) != 1 || incidents.opened[0].MonitorID != down.ID || incidents.opened[0].Cause != "connection refused" || !incidents.opened[0].StartedAt.Equal(now) {
+		t.Fatalf("opened incidents = %+v", incidents.opened)
+	}
+	monitors.resultStatus = domain.StatusDown
+	service.prober = &fixedProber{result: ProbeResult{Up: true, Detail: "HTTP 200"}}
+	if err := service.Run(context.Background(), domain.Monitor{ID: down.ID, Status: domain.StatusDown, ConsecutiveFailures: 2}, "claim-up"); err != nil {
+		t.Fatalf("Run(recovery) error = %v", err)
+	}
+	if len(incidents.resolved) != 1 || incidents.resolved[0] != down.ID || !incidents.resolvedAt[0].Equal(now) {
+		t.Fatalf("resolved incidents = %v at %v", incidents.resolved, incidents.resolvedAt)
+	}
+}
+
+func TestCheckServiceDoesNotCreateIncidentBeforeFailureThreshold(t *testing.T) {
+	incidents := &memoryIncidents{}
+	service, err := NewCheckService(&memoryMonitors{}, &memoryChecks{}, incidents, &fixedProber{result: ProbeResult{Detail: "timeout"}}, &fixedServiceClock{now: time.Now()}, 2, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Run(context.Background(), domain.Monitor{ID: "monitor-1", Status: domain.StatusUp}, "claim-token"); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(incidents.opened) != 0 {
+		t.Fatalf("opened incidents before threshold = %+v", incidents.opened)
 	}
 }
 

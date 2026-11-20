@@ -435,14 +435,32 @@ func (repository *memoryChecks) DeleteByMonitor(_ context.Context, id domain.ID)
 }
 
 type memoryIncidents struct {
-	deleted   []domain.ID
-	lastLimit int
-	err       error
+	deleted    []domain.ID
+	lastLimit  int
+	err        error
+	openErr    error
+	resolveErr error
+	opened     []domain.Incident
+	resolved   []domain.ID
+	resolvedAt []time.Time
 }
 
-func (*memoryIncidents) Open(context.Context, *domain.Incident) error { return nil }
+func (repository *memoryIncidents) Open(_ context.Context, incident *domain.Incident) error {
+	if repository.openErr != nil {
+		return repository.openErr
+	}
+	repository.opened = append(repository.opened, *incident)
+	return nil
+}
 
-func (*memoryIncidents) Resolve(context.Context, domain.ID, time.Time) error { return nil }
+func (repository *memoryIncidents) Resolve(_ context.Context, id domain.ID, at time.Time) error {
+	if repository.resolveErr != nil {
+		return repository.resolveErr
+	}
+	repository.resolved = append(repository.resolved, id)
+	repository.resolvedAt = append(repository.resolvedAt, at)
+	return nil
+}
 
 func (repository *memoryIncidents) ListByMonitor(_ context.Context, _ domain.ID, limit int) ([]domain.Incident, error) {
 	repository.lastLimit = limit
