@@ -260,6 +260,37 @@ func TestAuthenticationServiceForgotPasswordDoesNotExposeMailFailure(t *testing.
 	}
 }
 
+func TestAuthenticationServiceResetPasswordUpdatesPasswordAndRevokesSessions(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.May, 6, 7, 8, 9, 0, time.UTC)}
+	auth, users, sessions, resets, tokens := newTestAuthenticationService(t, clock)
+	users.stored["user-1"] = &domain.User{ID: "user-1", Email: "user@example.test", PasswordHash: "hashed:old-password"}
+	resets.created = append(resets.created, &domain.PasswordReset{ID: "reset-1", UserID: "user-1", TokenHash: tokens.Hash("reset-token"), ExpiresAt: clock.now.Add(time.Hour)})
+	sessions.created = append(sessions.created, &domain.Session{ID: "session-1", UserID: "user-1"}, &domain.Session{ID: "session-2", UserID: "user-1"})
+	if err := auth.ResetPassword(context.Background(), "reset-token", "new-password"); err != nil {
+		t.Fatalf("ResetPassword() error = %v", err)
+	}
+	if users.stored["user-1"].PasswordHash != "hashed:new-password" || len(resets.deletedUsers) != 1 || resets.deletedUsers[0] != "user-1" || len(sessions.userDeleted) != 1 || sessions.userDeleted[0] != "user-1" {
+		t.Fatalf("password/reset/session state = %+v / %+v / %+v", users.stored["user-1"], resets, sessions)
+	}
+}
+
+func TestAuthenticationServiceResetPasswordRejectsMissingOrExpiredToken(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.May, 6, 7, 8, 9, 0, time.UTC)}
+	auth, users, _, resets, tokens := newTestAuthenticationService(t, clock)
+	users.stored["user-1"] = &domain.User{ID: "user-1", PasswordHash: "hashed:old-password"}
+	for _, test := range []string{"missing-token", "expired-token"} {
+		if test == "expired-token" {
+			resets.created = append(resets.created, &domain.PasswordReset{UserID: "user-1", TokenHash: tokens.Hash(test), ExpiresAt: clock.now})
+		}
+		if err := auth.ResetPassword(context.Background(), test, "new-password"); err != apperrors.ErrInvalidToken {
+			t.Errorf("ResetPassword(%q) error = %v, want ErrInvalidToken", test, err)
+		}
+	}
+	if users.stored["user-1"].PasswordHash != "hashed:old-password" {
+		t.Fatal("invalid token changed the password")
+	}
+}
+
 func newTestAuthenticationService(t *testing.T, clock Clock) (*AuthenticationService, *memoryUsers, *memorySessions, *memoryPasswordResets, *fixedTokens) {
 	t.Helper()
 	users := &memoryUsers{stored: make(map[domain.ID]*domain.User)}

@@ -175,6 +175,41 @@ func (auth *AuthenticationService) ForgotPassword(ctx context.Context, email str
 	return nil
 }
 
+func (auth *AuthenticationService) ResetPassword(ctx context.Context, rawToken, newPassword string) error {
+	reset, err := auth.dependencies.PasswordResets.GetByTokenHash(ctx, auth.dependencies.Tokens.Hash(rawToken))
+	if errors.Is(err, apperrors.ErrNotFound) {
+		return apperrors.ErrInvalidToken
+	}
+	if err != nil {
+		return err
+	}
+	if !reset.ExpiresAt.After(auth.dependencies.Clock.Now()) {
+		return apperrors.ErrInvalidToken
+	}
+	if err := domain.ValidatePassword(newPassword); err != nil {
+		return err
+	}
+	passwordHash, err := auth.dependencies.Passwords.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+	user, err := auth.dependencies.Users.GetByID(ctx, reset.UserID)
+	if errors.Is(err, apperrors.ErrNotFound) {
+		return apperrors.ErrInvalidToken
+	}
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = passwordHash
+	if err := auth.dependencies.Users.Update(ctx, user); err != nil {
+		return err
+	}
+	if err := auth.dependencies.PasswordResets.DeleteByUser(ctx, user.ID); err != nil {
+		return err
+	}
+	return auth.dependencies.Sessions.DeleteByUser(ctx, user.ID)
+}
+
 func (auth *AuthenticationService) createSession(ctx context.Context, user *domain.User) (AuthenticationResult, error) {
 	rawToken, tokenHash, err := auth.dependencies.Tokens.New()
 	if err != nil {
