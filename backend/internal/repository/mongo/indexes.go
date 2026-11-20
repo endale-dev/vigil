@@ -64,3 +64,25 @@ func CreatePasswordResetIndexes(ctx context.Context, database *driver.Database) 
 	}
 	return nil
 }
+
+func CreateMonitorIndexes(ctx context.Context, database *driver.Database) error {
+	models := []driver.IndexModel{
+		{
+			Keys:    bson.D{{Key: "ownerId", Value: 1}},
+			Options: options.Index().SetName("monitors_owner"),
+		},
+		{
+			Keys: bson.D{
+				{Key: "enabled", Value: 1},
+				{Key: "nextCheckAt", Value: 1},
+				{Key: "leaseUntil", Value: 1},
+				{Key: "_id", Value: 1},
+			},
+			Options: options.Index().SetName("monitors_due_lease"),
+		},
+	}
+	if _, err := database.Collection("monitors").Indexes().CreateMany(ctx, models); err != nil {
+		return fmt.Errorf("create monitor indexes: %w", err)
+	}
+	return nil
+}
