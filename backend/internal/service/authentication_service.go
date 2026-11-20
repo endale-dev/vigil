@@ -91,6 +91,20 @@ func (auth *AuthenticationService) Register(ctx context.Context, name, email, pa
 	return AuthenticationResult{}, apperrors.ErrSlugTaken
 }
 
+func (auth *AuthenticationService) Login(ctx context.Context, email, password string) (AuthenticationResult, error) {
+	user, err := auth.dependencies.Users.GetByEmail(ctx, normalizeEmail(email))
+	if errors.Is(err, apperrors.ErrNotFound) {
+		return AuthenticationResult{}, apperrors.ErrInvalidCredentials
+	}
+	if err != nil {
+		return AuthenticationResult{}, err
+	}
+	if user.PasswordHash == "" || !auth.dependencies.Passwords.Verify(password, user.PasswordHash) {
+		return AuthenticationResult{}, apperrors.ErrInvalidCredentials
+	}
+	return auth.createSession(ctx, user)
+}
+
 func (auth *AuthenticationService) createSession(ctx context.Context, user *domain.User) (AuthenticationResult, error) {
 	rawToken, tokenHash, err := auth.dependencies.Tokens.New()
 	if err != nil {

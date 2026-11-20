@@ -121,6 +121,52 @@ func TestAuthenticationServiceRegisterPropagatesSessionError(t *testing.T) {
 	}
 }
 
+func TestAuthenticationServiceLoginUsesUniformInvalidCredentials(t *testing.T) {
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, &fixedServiceClock{now: time.Now()})
+	users.stored["password-user"] = &domain.User{
+		ID: "password-user", Email: "user@example.test", PasswordHash: "hashed:valid-password",
+	}
+	users.stored["google-user"] = &domain.User{
+		ID: "google-user", Email: "google@example.test", GoogleSub: "google-sub",
+	}
+	for _, test := range []struct {
+		name     string
+		email    string
+		password string
+	}{
+		{name: "unknown email", email: "missing@example.test", password: "valid-password"},
+		{name: "wrong password", email: " USER@example.test ", password: "wrong-password"},
+		{name: "Google-only account", email: "google@example.test", password: "valid-password"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := auth.Login(context.Background(), test.email, test.password); err != apperrors.ErrInvalidCredentials {
+				t.Fatalf("Login() error = %v, want ErrInvalidCredentials", err)
+			}
+		})
+	}
+	if len(sessions.created) != 0 {
+		t.Fatalf("failed logins created %d sessions", len(sessions.created))
+	}
+}
+
+func TestAuthenticationServiceLoginCreatesSessionOnSuccess(t *testing.T) {
+	clock := &fixedServiceClock{now: time.Date(2026, time.February, 3, 4, 5, 6, 0, time.UTC)}
+	auth, users, sessions, _, _ := newTestAuthenticationService(t, clock)
+	users.stored["password-user"] = &domain.User{
+		ID: "password-user", Name: "Example", Email: "user@example.test", PasswordHash: "hashed:valid-password",
+	}
+	result, err := auth.Login(context.Background(), " USER@EXAMPLE.TEST ", "valid-password")
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+	if result.User.ID != "password-user" || result.User.PasswordHash != "" || result.SessionToken != "raw-session-token" {
+		t.Fatalf("Login() result = %+v", result)
+	}
+	if len(sessions.created) != 1 || sessions.created[0].UserID != result.User.ID || !sessions.created[0].ExpiresAt.Equal(clock.now.Add(24*time.Hour)) {
+		t.Fatalf("created sessions = %+v", sessions.created)
+	}
+}
+
 func newTestAuthenticationService(t *testing.T, clock Clock) (*AuthenticationService, *memoryUsers, *memorySessions, *memoryPasswordResets, *fixedTokens) {
 	t.Helper()
 	users := &memoryUsers{stored: make(map[domain.ID]*domain.User)}
