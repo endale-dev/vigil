@@ -4,6 +4,30 @@ export type MonitorStatus = 'unknown' | 'up' | 'down'
 
 export type OverallStatus = 'operational' | 'degraded' | 'unknown'
 
+export type NotificationChannel = 'email' | 'telegram'
+
+export interface RegisterRequest {
+  name: string
+  email: string
+  password: string
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface MonitorRequest {
+  name: string
+  type: MonitorType
+  target: string
+  intervalSeconds: number
+  timeoutSeconds: number
+  expectedStatus: number
+  tlsWarnDays: number
+  public: boolean
+}
+
 export interface ErrorDTO {
   error: string
   field?: string
