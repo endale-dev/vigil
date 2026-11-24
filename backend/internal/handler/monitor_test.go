@@ -191,6 +191,30 @@ func TestCreateMonitorHandlerMapsRequestAndReturnsCreatedDTO(t *testing.T) {
 	}
 }
 
+func TestCreateMonitorHandlerRejectsInvalidAndOversizedJSON(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{name: "invalid JSON", body: `{"name":`, wantStatus: http.StatusBadRequest},
+		{name: "body over limit", body: strings.Repeat(" ", maxJSONBodySize+1), wantStatus: http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			monitorService := &monitorServiceStub{}
+			handler := newMonitorHandlerForTest(t, monitorService, &authenticationStub{authResult: service.AuthenticatedSession{User: domain.User{ID: "owner-1"}}})
+			request := httptest.NewRequest(http.MethodPost, "/api/monitors", strings.NewReader(test.body))
+			request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+			response := httptest.NewRecorder()
+			handler.Create(response, request)
+
+			if response.Code != test.wantStatus || monitorService.createCalls != 0 {
+				t.Fatalf("response/service calls = %d/%d, want %d/0", response.Code, monitorService.createCalls, test.wantStatus)
+			}
+		})
+	}
+}
+
 func TestGetMonitorHandlerReturnsUptimeDetail(t *testing.T) {
 	monitorService := &monitorServiceStub{detail: service.MonitorDetail{
 		Monitor: domain.Monitor{ID: "monitor-1", OwnerID: "owner-1", Name: "API"},
