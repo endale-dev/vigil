@@ -49,6 +49,16 @@ type MonitorDTO struct {
 	CreatedAt       time.Time  `json:"createdAt"`
 }
 
+type MonitorListDTO struct {
+	MonitorDTO
+	Uptime24Hours UptimeSummaryDTO `json:"uptime24Hours"`
+}
+
+type MonitorDetailDTO struct {
+	MonitorDTO
+	Uptime MonitorUptimeDTO `json:"uptime"`
+}
+
 type CheckDTO struct {
 	ID        string    `json:"id"`
 	CheckedAt time.Time `json:"checkedAt"`
@@ -113,6 +123,14 @@ func monitorDTO(monitor domain.Monitor) MonitorDTO {
 		Public: monitor.Public, Enabled: monitor.Enabled, Status: string(monitor.Status),
 		LastCheckedAt: optionalTime(monitor.LastCheckedAt), CreatedAt: monitor.CreatedAt,
 	}
+}
+
+func monitorListDTO(item service.MonitorListItem) MonitorListDTO {
+	return MonitorListDTO{MonitorDTO: monitorDTO(item.Monitor), Uptime24Hours: uptimeSummaryDTO(item.Uptime)}
+}
+
+func monitorDetailDTO(detail service.MonitorDetail) MonitorDetailDTO {
+	return MonitorDetailDTO{MonitorDTO: monitorDTO(detail.Monitor), Uptime: monitorUptimeDTO(detail.Uptime)}
 }
 
 func checkDTO(check domain.Check) CheckDTO {

@@ -124,6 +124,57 @@ func TestMonitorServiceListAndGetAreOwnerScoped(t *testing.T) {
 	}
 }
 
+func TestMonitorServiceListWithUptimeReturnsOnlyOwnerMonitors(t *testing.T) {
+	now := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1"},
+		"monitor-2": {ID: "monitor-2", OwnerID: "owner-2"},
+	}}
+	checks := &memoryChecks{uptimeResults: []domain.Uptime{{Up: 3, Total: 4}}}
+	monitors, err := NewMonitorService(repository, checks, &memoryIncidents{}, &fixedServiceClock{now: now}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := monitors.ListWithUptime(context.Background(), "owner-1")
+	if err != nil || len(items) != 1 || items[0].Monitor.ID != "monitor-1" {
+		t.Fatalf("ListWithUptime() = (%+v, %v), want only monitor-1", items, err)
+	}
+	if items[0].Uptime.Up != 3 || items[0].Uptime.Total != 4 || items[0].Uptime.Ratio == nil || *items[0].Uptime.Ratio != 0.75 {
+		t.Fatalf("24-hour uptime = %+v", items[0].Uptime)
+	}
+	if len(checks.uptimeSince) != 1 || !checks.uptimeSince[0].Equal(now.Add(-24*time.Hour)) {
+		t.Fatalf("uptime queries = %v, want one query from the last 24 hours", checks.uptimeSince)
+	}
+}
+
+func TestMonitorServiceGetWithUptimeReturnsAllPeriods(t *testing.T) {
+	now := time.Date(2026, time.October, 2, 12, 0, 0, 0, time.UTC)
+	repository := &memoryMonitors{items: map[domain.ID]domain.Monitor{
+		"monitor-1": {ID: "monitor-1", OwnerID: "owner-1", Name: "API"},
+	}}
+	checks := &memoryChecks{uptimeResults: []domain.Uptime{{Up: 1, Total: 2}, {Up: 3, Total: 4}, {Up: 5, Total: 6}}}
+	monitors, err := NewMonitorService(repository, checks, &memoryIncidents{}, &fixedServiceClock{now: now}, 25)
+	if err != nil {
+		t.Fatal(err)
+	}
+	detail, err := monitors.GetWithUptime(context.Background(), "owner-1", "monitor-1")
+	if err != nil || detail.Monitor.ID != "monitor-1" || detail.Monitor.Name != "API" {
+		t.Fatalf("GetWithUptime() = (%+v, %v)", detail, err)
+	}
+	if detail.Uptime.Last24Hours.Total != 2 || detail.Uptime.Last7Days.Total != 4 || detail.Uptime.Last30Days.Total != 6 {
+		t.Fatalf("uptime periods = %+v", detail.Uptime)
+	}
+	wantSince := []time.Time{now.Add(-24 * time.Hour), now.Add(-7 * 24 * time.Hour), now.Add(-30 * 24 * time.Hour)}
+	if len(checks.uptimeSince) != len(wantSince) {
+		t.Fatalf("got %d uptime queries, want %d", len(checks.uptimeSince), len(wantSince))
+	}
+	for index := range wantSince {
+		if !checks.uptimeSince[index].Equal(wantSince[index]) {
+			t.Errorf("uptime query %d starts at %v, want %v", index, checks.uptimeSince[index], wantSince[index])
+		}
+	}
+}
+
 func TestMonitorServiceUpdateResetsStateWhenTargetChanges(t *testing.T) {
 	now := time.Date(2026, time.August, 9, 10, 11, 12, 0, time.UTC)
 	existing := domain.Monitor{

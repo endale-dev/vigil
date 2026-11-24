@@ -30,6 +30,16 @@ type MonitorUptime struct {
 	Last30Days  UptimeSummary
 }
 
+type MonitorListItem struct {
+	Monitor domain.Monitor
+	Uptime  UptimeSummary
+}
+
+type MonitorDetail struct {
+	Monitor domain.Monitor
+	Uptime  MonitorUptime
+}
+
 func NewMonitorService(monitors domain.MonitorRepository, checks domain.CheckRepository, incidents domain.IncidentRepository, clock Clock, limit int) (*MonitorService, error) {
 	if monitors == nil || checks == nil || incidents == nil || clock == nil || limit < 1 {
 		return nil, errors.New("monitor service dependencies are incomplete")
@@ -81,6 +91,23 @@ func (monitors *MonitorService) List(ctx context.Context, ownerID domain.ID) ([]
 	return monitors.monitors.ListByOwner(ctx, ownerID)
 }
 
+func (monitors *MonitorService) ListWithUptime(ctx context.Context, ownerID domain.ID) ([]MonitorListItem, error) {
+	owned, err := monitors.List(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]MonitorListItem, 0, len(owned))
+	since := monitors.clock.Now().Add(-24 * time.Hour)
+	for _, monitor := range owned {
+		uptime, err := monitors.checks.UptimeSince(ctx, monitor.ID, since)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, MonitorListItem{Monitor: monitor, Uptime: summarizeUptime(uptime)})
+	}
+	return items, nil
+}
+
 func (monitors *MonitorService) Get(ctx context.Context, ownerID, monitorID domain.ID) (*domain.Monitor, error) {
 	monitor, err := monitors.monitors.GetByID(ctx, monitorID)
 	if err != nil {
@@ -90,6 +117,18 @@ func (monitors *MonitorService) Get(ctx context.Context, ownerID, monitorID doma
 		return nil, apperrors.ErrNotFound
 	}
 	return monitor, nil
+}
+
+func (monitors *MonitorService) GetWithUptime(ctx context.Context, ownerID, monitorID domain.ID) (MonitorDetail, error) {
+	monitor, err := monitors.Get(ctx, ownerID, monitorID)
+	if err != nil {
+		return MonitorDetail{}, err
+	}
+	uptime, err := monitors.uptime(ctx, monitor.ID, monitors.clock.Now())
+	if err != nil {
+		return MonitorDetail{}, err
+	}
+	return MonitorDetail{Monitor: *monitor, Uptime: uptime}, nil
 }
 
 func (monitors *MonitorService) Update(ctx context.Context, ownerID, monitorID domain.ID, draft domain.Monitor) (*domain.Monitor, error) {
@@ -179,7 +218,10 @@ func (monitors *MonitorService) Uptime(ctx context.Context, ownerID, monitorID d
 	if _, err := monitors.Get(ctx, ownerID, monitorID); err != nil {
 		return MonitorUptime{}, err
 	}
-	now := monitors.clock.Now()
+	return monitors.uptime(ctx, monitorID, monitors.clock.Now())
+}
+
+func (monitors *MonitorService) uptime(ctx context.Context, monitorID domain.ID, now time.Time) (MonitorUptime, error) {
 	periods := []time.Duration{24 * time.Hour, 7 * 24 * time.Hour, 30 * 24 * time.Hour}
 	results := make([]UptimeSummary, len(periods))
 	for index, period := range periods {
