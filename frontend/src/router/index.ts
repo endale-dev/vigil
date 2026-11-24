@@ -1,11 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import AppShell from '../components/AppShell.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 import HomeView from '../views/HomeView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import LoginView from '../views/LoginView.vue'
 import MonitorDetailView from '../views/MonitorDetailView.vue'
+import PublicStatusView from '../views/PublicStatusView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
 import SettingsView from '../views/SettingsView.vue'
@@ -31,7 +31,7 @@ const router = createRouter({
     { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { title: 'Dashboard', requiresAuth: true } },
     { path: '/monitors/:id', name: 'monitor-detail', component: MonitorDetailView, meta: { title: 'Monitor', requiresAuth: true } },
     { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Settings', requiresAuth: true } },
-    { path: '/status/:slug', name: 'public-status', component: AppShell, meta: { title: 'Public status' } },
+    { path: '/status/:slug', name: 'public-status', component: PublicStatusView, meta: { title: 'Public status' } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
   ],
 })
