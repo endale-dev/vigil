@@ -122,10 +122,7 @@ func CreateIncidentIndexes(ctx context.Context, database *driver.Database) error
 		{
 			Keys: bson.D{{Key: "monitorId", Value: 1}},
 			Options: options.Index().SetName("incidents_one_open_per_monitor").SetUnique(true).
-				SetPartialFilterExpression(bson.D{{Key: "$or", Value: bson.A{
-					bson.D{{Key: "resolvedAt", Value: bson.D{{Key: "$exists", Value: false}}}},
-					bson.D{{Key: "resolvedAt", Value: nil}},
-				}}}),
+				SetPartialFilterExpression(bson.D{{Key: "resolvedAt", Value: nil}}),
 		},
 	}
 	if _, err := database.Collection("incidents").Indexes().CreateMany(ctx, models); err != nil {
