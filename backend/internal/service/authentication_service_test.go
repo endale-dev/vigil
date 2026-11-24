@@ -144,7 +144,7 @@ func TestAuthenticationServiceRegisterCreatesUserAndSession(t *testing.T) {
 	if result.User.PasswordHash != "" {
 		t.Fatal("Register() returned a password hash")
 	}
-	if result.SessionToken != "raw-session-token" || users.createCalls != 1 || tokens.newCalls != 1 {
+	if result.SessionToken != "raw-session-token" || !result.HasPassword || !result.SessionExpiresAt.Equal(clock.now.Add(24*time.Hour)) || users.createCalls != 1 || tokens.newCalls != 1 {
 		t.Fatalf("registration result or calls = token %q, creates %d, tokens %d", result.SessionToken, users.createCalls, tokens.newCalls)
 	}
 	if !regexp.MustCompile(`^[a-z2-7]{10}$`).MatchString(result.User.StatusSlug) {
@@ -264,10 +264,10 @@ func TestAuthenticationServiceLoginCreatesSessionOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	if result.User.ID != "password-user" || result.User.PasswordHash != "" || result.SessionToken != "raw-session-token" {
+	if result.User.ID != "password-user" || result.User.PasswordHash != "" || result.SessionToken != "raw-session-token" || !result.HasPassword {
 		t.Fatalf("Login() result = %+v", result)
 	}
-	if len(sessions.created) != 1 || sessions.created[0].UserID != result.User.ID || !sessions.created[0].ExpiresAt.Equal(clock.now.Add(24*time.Hour)) {
+	if len(sessions.created) != 1 || sessions.created[0].UserID != result.User.ID || !sessions.created[0].ExpiresAt.Equal(clock.now.Add(24*time.Hour)) || !result.SessionExpiresAt.Equal(sessions.created[0].ExpiresAt) {
 		t.Fatalf("created sessions = %+v", sessions.created)
 	}
 }
@@ -286,7 +286,7 @@ func TestAuthenticationServiceAuthenticateReturnsUserAndSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Authenticate() error = %v", err)
 	}
-	if result.User.ID != "user-1" || result.User.PasswordHash != "" || result.Session.ID != "session-1" {
+	if result.User.ID != "user-1" || result.User.PasswordHash != "" || result.Session.ID != "session-1" || !result.HasPassword {
 		t.Fatalf("Authenticate() = %+v", result)
 	}
 }

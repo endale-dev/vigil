@@ -16,7 +16,7 @@ func TestUserDTOOmitsCredentials(t *testing.T) {
 		PasswordHash: "secret-hash", GoogleSub: "google-secret", StatusSlug: "public-status",
 		Notify: domain.NotifySettings{EmailAlerts: true, TelegramChatID: "123456"},
 	}
-	encoded, err := json.Marshal(userDTO(user, true, true))
+	encoded, err := json.Marshal(userDTO(user, true, true, true))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -95,10 +95,10 @@ type PublicCheckDTO struct {
 	LatencyMS int64 `json:"latencyMs"`
 }
 
-func userDTO(user domain.User, googleEnabled, telegramEnabled bool) UserDTO {
+func userDTO(user domain.User, hasPassword, googleEnabled, telegramEnabled bool) UserDTO {
 	return UserDTO{
 		ID: string(user.ID), Name: user.Name, Email: user.Email,
-		HasPassword: user.PasswordHash != "", GoogleLinked: user.GoogleSub != "",
+		HasPassword: hasPassword, GoogleLinked: user.GoogleSub != "",
 		StatusSlug:   user.StatusSlug,
 		Notify:       NotifyDTO{EmailAlerts: user.Notify.EmailAlerts, TelegramChatID: user.Notify.TelegramChatID},
 		Capabilities: CapabilitiesDTO{Google: googleEnabled, Telegram: telegramEnabled},

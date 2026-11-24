@@ -27,6 +27,8 @@ func TestWriteErrorMapsApplicationErrors(t *testing.T) {
 		{name: "unauthenticated", err: apperrors.ErrUnauthenticated, status: http.StatusUnauthorized, message: "unauthenticated"},
 		{name: "invalid token", err: apperrors.ErrInvalidToken, status: http.StatusBadRequest, message: "invalid token"},
 		{name: "limit reached", err: apperrors.ErrLimitReached, status: http.StatusForbidden, message: "limit reached"},
+		{name: "invalid JSON", err: errInvalidJSON, status: http.StatusBadRequest, message: "invalid JSON request"},
+		{name: "large JSON body", err: errRequestTooLarge, status: http.StatusRequestEntityTooLarge, message: "request body is too large"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

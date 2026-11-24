@@ -16,6 +16,10 @@ func writeError(writer http.ResponseWriter, err error, logger *slog.Logger) erro
 
 	status, message := http.StatusInternalServerError, "internal server error"
 	switch {
+	case errors.Is(err, errInvalidJSON):
+		status, message = http.StatusBadRequest, "invalid JSON request"
+	case errors.Is(err, errRequestTooLarge):
+		status, message = http.StatusRequestEntityTooLarge, "request body is too large"
 	case errors.Is(err, apperrors.ErrNotFound), errors.Is(err, apperrors.ErrProviderDisabled):
 		status, message = http.StatusNotFound, "not found"
 	case errors.Is(err, apperrors.ErrEmailTaken):

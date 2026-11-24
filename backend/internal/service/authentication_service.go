@@ -35,13 +35,16 @@ type AuthenticationService struct {
 }
 
 type AuthenticationResult struct {
-	User         domain.User
-	SessionToken string
+	User             domain.User
+	SessionToken     string
+	SessionExpiresAt time.Time
+	HasPassword      bool
 }
 
 type AuthenticatedSession struct {
-	User    domain.User
-	Session domain.Session
+	User        domain.User
+	Session     domain.Session
+	HasPassword bool
 }
 
 type GoogleLoginStart struct {
@@ -261,8 +264,9 @@ func (auth *AuthenticationService) Authenticate(ctx context.Context, rawToken st
 	if err != nil {
 		return AuthenticatedSession{}, apperrors.ErrUnauthenticated
 	}
+	hasPassword := user.PasswordHash != ""
 	user.PasswordHash = ""
-	return AuthenticatedSession{User: *user, Session: *session}, nil
+	return AuthenticatedSession{User: *user, Session: *session, HasPassword: hasPassword}, nil
 }
 
 func (auth *AuthenticationService) ForgotPassword(ctx context.Context, email string) error {
@@ -384,8 +388,11 @@ func (auth *AuthenticationService) createSession(ctx context.Context, user *doma
 		return AuthenticationResult{}, err
 	}
 	publicUser := *user
+	hasPassword := publicUser.PasswordHash != ""
 	publicUser.PasswordHash = ""
-	return AuthenticationResult{User: publicUser, SessionToken: rawToken}, nil
+	return AuthenticationResult{
+		User: publicUser, SessionToken: rawToken, SessionExpiresAt: session.ExpiresAt, HasPassword: hasPassword,
+	}, nil
 }
 
 func newStatusSlug() (string, error) {
