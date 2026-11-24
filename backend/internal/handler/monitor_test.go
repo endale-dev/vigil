@@ -16,30 +16,55 @@ import (
 )
 
 type monitorServiceStub struct {
-	listItems   []service.MonitorListItem
-	listErr     error
-	listOwner   domain.ID
-	listCalls   int
-	created     *domain.Monitor
-	createErr   error
-	createOwner domain.ID
-	createDraft domain.Monitor
-	createCalls int
-	detail      service.MonitorDetail
-	detailErr   error
-	detailOwner domain.ID
-	detailID    domain.ID
-	detailCalls int
-	updated     *domain.Monitor
-	updateErr   error
-	updateOwner domain.ID
-	updateID    domain.ID
-	updateDraft domain.Monitor
-	updateCalls int
-	deleteErr   error
-	deleteOwner domain.ID
-	deleteID    domain.ID
-	deleteCalls int
+	listItems      []service.MonitorListItem
+	listErr        error
+	listOwner      domain.ID
+	listCalls      int
+	created        *domain.Monitor
+	createErr      error
+	createOwner    domain.ID
+	createDraft    domain.Monitor
+	createCalls    int
+	monitor        *domain.Monitor
+	getErr         error
+	getOwner       domain.ID
+	getID          domain.ID
+	getCalls       int
+	detail         service.MonitorDetail
+	detailErr      error
+	detailOwner    domain.ID
+	detailID       domain.ID
+	detailCalls    int
+	updated        *domain.Monitor
+	updateErr      error
+	updateOwner    domain.ID
+	updateID       domain.ID
+	updateDraft    domain.Monitor
+	updateCalls    int
+	deleteErr      error
+	deleteOwner    domain.ID
+	deleteID       domain.ID
+	deleteCalls    int
+	pauseErr       error
+	pauseOwner     domain.ID
+	pauseID        domain.ID
+	pauseCalls     int
+	resumeErr      error
+	resumeOwner    domain.ID
+	resumeID       domain.ID
+	resumeCalls    int
+	checks         []domain.Check
+	checksErr      error
+	checksOwner    domain.ID
+	checksID       domain.ID
+	checksLimit    int
+	checksCalls    int
+	incidents      []domain.Incident
+	incidentsErr   error
+	incidentsOwner domain.ID
+	incidentsID    domain.ID
+	incidentsLimit int
+	incidentsCalls int
 }
 
 func (stub *monitorServiceStub) ListWithUptime(_ context.Context, owner domain.ID) ([]service.MonitorListItem, error) {
@@ -53,6 +78,13 @@ func (stub *monitorServiceStub) Create(_ context.Context, owner domain.ID, draft
 	stub.createOwner = owner
 	stub.createDraft = draft
 	return stub.created, stub.createErr
+}
+
+func (stub *monitorServiceStub) Get(_ context.Context, owner, id domain.ID) (*domain.Monitor, error) {
+	stub.getCalls++
+	stub.getOwner = owner
+	stub.getID = id
+	return stub.monitor, stub.getErr
 }
 
 func (stub *monitorServiceStub) GetWithUptime(_ context.Context, owner, id domain.ID) (service.MonitorDetail, error) {
@@ -75,6 +107,36 @@ func (stub *monitorServiceStub) Delete(_ context.Context, owner, id domain.ID) e
 	stub.deleteOwner = owner
 	stub.deleteID = id
 	return stub.deleteErr
+}
+
+func (stub *monitorServiceStub) Pause(_ context.Context, owner, id domain.ID) error {
+	stub.pauseCalls++
+	stub.pauseOwner = owner
+	stub.pauseID = id
+	return stub.pauseErr
+}
+
+func (stub *monitorServiceStub) Resume(_ context.Context, owner, id domain.ID) error {
+	stub.resumeCalls++
+	stub.resumeOwner = owner
+	stub.resumeID = id
+	return stub.resumeErr
+}
+
+func (stub *monitorServiceStub) ListChecks(_ context.Context, owner, id domain.ID, limit int) ([]domain.Check, error) {
+	stub.checksCalls++
+	stub.checksOwner = owner
+	stub.checksID = id
+	stub.checksLimit = limit
+	return stub.checks, stub.checksErr
+}
+
+func (stub *monitorServiceStub) ListIncidents(_ context.Context, owner, id domain.ID, limit int) ([]domain.Incident, error) {
+	stub.incidentsCalls++
+	stub.incidentsOwner = owner
+	stub.incidentsID = id
+	stub.incidentsLimit = limit
+	return stub.incidents, stub.incidentsErr
 }
 
 func TestMonitorListHandlerReturnsOwnedMonitorsWithDailyUptime(t *testing.T) {
@@ -178,6 +240,99 @@ func TestDeleteMonitorHandlerReturnsNoContent(t *testing.T) {
 	handler.Delete(response, request)
 	if response.Code != http.StatusNoContent || response.Body.Len() != 0 || monitorService.deleteOwner != "owner-1" || monitorService.deleteID != "monitor-1" {
 		t.Fatalf("delete status/body/service args = %d/%q/%q/%q", response.Code, response.Body.String(), monitorService.deleteOwner, monitorService.deleteID)
+	}
+}
+
+func TestPauseAndResumeMonitorHandlersReturnUpdatedMonitor(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		handle      func(*MonitorHandler, http.ResponseWriter, *http.Request)
+		monitor     domain.Monitor
+		wantEnabled bool
+	}{
+		{name: "pause", handle: (*MonitorHandler).Pause, monitor: domain.Monitor{ID: "monitor-1", Enabled: false}},
+		{name: "resume", handle: (*MonitorHandler).Resume, monitor: domain.Monitor{ID: "monitor-1", Enabled: true}, wantEnabled: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			monitorService := &monitorServiceStub{monitor: &test.monitor}
+			handler := newMonitorHandlerForTest(t, monitorService, &authenticationStub{authResult: service.AuthenticatedSession{User: domain.User{ID: "owner-1"}}})
+			request := httptest.NewRequest(http.MethodPost, "/api/monitors/monitor-1/"+test.name, nil)
+			request.SetPathValue("id", "monitor-1")
+			request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+			response := httptest.NewRecorder()
+			test.handle(handler, response, request)
+
+			if response.Code != http.StatusOK || monitorService.getOwner != "owner-1" || monitorService.getID != "monitor-1" {
+				t.Fatalf("response/service lookup = %d/%q/%q", response.Code, monitorService.getOwner, monitorService.getID)
+			}
+			if test.wantEnabled {
+				if monitorService.resumeCalls != 1 || monitorService.resumeOwner != "owner-1" || monitorService.resumeID != "monitor-1" || monitorService.pauseCalls != 0 {
+					t.Fatalf("resume service args = %+v", monitorService)
+				}
+			} else if monitorService.pauseCalls != 1 || monitorService.pauseOwner != "owner-1" || monitorService.pauseID != "monitor-1" || monitorService.resumeCalls != 0 {
+				t.Fatalf("pause service args = %+v", monitorService)
+			}
+			var result MonitorDTO
+			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.ID != "monitor-1" || result.Enabled != test.wantEnabled {
+				t.Fatalf("updated monitor response = %+v", result)
+			}
+		})
+	}
+}
+
+func TestMonitorChecksAndIncidentsHandlersReturnDTOs(t *testing.T) {
+	monitorService := &monitorServiceStub{
+		checks:    []domain.Check{{ID: "check-1", MonitorID: "monitor-1", CheckedAt: time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC), Up: true, Latency: 1500 * time.Millisecond}},
+		incidents: []domain.Incident{{ID: "incident-1", MonitorID: "monitor-1", Cause: "timeout"}},
+	}
+	handler := newMonitorHandlerForTest(t, monitorService, &authenticationStub{authResult: service.AuthenticatedSession{User: domain.User{ID: "owner-1"}}})
+
+	checksRequest := httptest.NewRequest(http.MethodGet, "/api/monitors/monitor-1/checks?limit=12", nil)
+	checksRequest.SetPathValue("id", "monitor-1")
+	checksRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	checksResponse := httptest.NewRecorder()
+	handler.Checks(checksResponse, checksRequest)
+	if checksResponse.Code != http.StatusOK || monitorService.checksOwner != "owner-1" || monitorService.checksID != "monitor-1" || monitorService.checksLimit != 12 {
+		t.Fatalf("checks response/service args = %d/%q/%q/%d", checksResponse.Code, monitorService.checksOwner, monitorService.checksID, monitorService.checksLimit)
+	}
+	var checks []CheckDTO
+	if err := json.Unmarshal(checksResponse.Body.Bytes(), &checks); err != nil {
+		t.Fatal(err)
+	}
+	if len(checks) != 1 || checks[0].ID != "check-1" || checks[0].LatencyMS != 1500 {
+		t.Fatalf("checks response = %+v", checks)
+	}
+
+	incidentsRequest := httptest.NewRequest(http.MethodGet, "/api/monitors/monitor-1/incidents", nil)
+	incidentsRequest.SetPathValue("id", "monitor-1")
+	incidentsRequest.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	incidentsResponse := httptest.NewRecorder()
+	handler.Incidents(incidentsResponse, incidentsRequest)
+	if incidentsResponse.Code != http.StatusOK || monitorService.incidentsOwner != "owner-1" || monitorService.incidentsID != "monitor-1" || monitorService.incidentsLimit != 0 {
+		t.Fatalf("incidents response/service args = %d/%q/%q/%d", incidentsResponse.Code, monitorService.incidentsOwner, monitorService.incidentsID, monitorService.incidentsLimit)
+	}
+	var incidents []IncidentDTO
+	if err := json.Unmarshal(incidentsResponse.Body.Bytes(), &incidents); err != nil {
+		t.Fatal(err)
+	}
+	if len(incidents) != 1 || incidents[0].ID != "incident-1" || incidents[0].Cause != "timeout" {
+		t.Fatalf("incidents response = %+v", incidents)
+	}
+}
+
+func TestMonitorChecksHandlerRejectsInvalidLimit(t *testing.T) {
+	monitorService := &monitorServiceStub{}
+	handler := newMonitorHandlerForTest(t, monitorService, &authenticationStub{authResult: service.AuthenticatedSession{User: domain.User{ID: "owner-1"}}})
+	request := httptest.NewRequest(http.MethodGet, "/api/monitors/monitor-1/checks?limit=many", nil)
+	request.SetPathValue("id", "monitor-1")
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.Checks(response, request)
+	if response.Code != http.StatusUnprocessableEntity || monitorService.checksCalls != 0 {
+		t.Fatalf("invalid limit status/service calls = %d/%d", response.Code, monitorService.checksCalls)
 	}
 }
 
