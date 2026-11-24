@@ -36,6 +36,10 @@ func (client *Client) Database() *driver.Database {
 	return client.database
 }
 
+func (client *Client) Ping(ctx context.Context) error {
+	return client.client.Ping(ctx, nil)
+}
+
 func (client *Client) Close(ctx context.Context) error {
 	return client.client.Disconnect(ctx)
 }
