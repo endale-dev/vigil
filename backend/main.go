@@ -65,7 +65,8 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if cfg.SMTPHost != "" {
 		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	}
-	alerter, err := service.NewAlertService([]service.Notifier{notify.NewEmailNotifier(mailer)}, logger)
+	notifiers := newNotifiers(cfg, mailer)
+	alerter, err := service.NewAlertService(notifiers, logger)
 	if err != nil {
 		return err
 	}
@@ -94,4 +95,12 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return secondErr
 	}
 	return nil
+}
+
+func newNotifiers(cfg config.Config, mailer service.Mailer) []service.Notifier {
+	notifiers := []service.Notifier{notify.NewEmailNotifier(mailer)}
+	if cfg.TelegramBotToken != "" {
+		notifiers = append(notifiers, notify.NewTelegramNotifier(cfg.TelegramBotToken))
+	}
+	return notifiers
 }
