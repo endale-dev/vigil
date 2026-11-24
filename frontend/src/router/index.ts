@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+import HomeView from '../views/HomeView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import { useSession } from '../composables/useSession'
@@ -10,13 +11,14 @@ declare module 'vue-router' {
     title?: string
     requiresAuth?: boolean
     guestOnly?: boolean
+    redirectAuthenticated?: boolean
   }
 }
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: { name: 'dashboard' } },
+    { path: '/', name: 'home', component: HomeView, meta: { title: 'Vigil', redirectAuthenticated: true } },
     { path: '/login', name: 'login', component: LoginView, meta: { title: 'Sign in', guestOnly: true } },
     { path: '/register', name: 'register', component: RegisterView, meta: { title: 'Create account', guestOnly: true } },
     { path: '/forgot-password', name: 'forgot-password', component: AppShell, meta: { title: 'Reset password' } },
@@ -31,7 +33,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const session = useSession()
-  if ((to.meta.requiresAuth || to.meta.guestOnly) && !session.isReady.value) {
+  if ((to.meta.requiresAuth || to.meta.guestOnly || to.meta.redirectAuthenticated) && !session.isReady.value) {
     await session.initialize().catch(() => null)
   }
 
@@ -39,6 +41,9 @@ router.beforeEach(async (to) => {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (to.meta.guestOnly && session.isAuthenticated.value) {
+    return { name: 'dashboard' }
+  }
+  if (to.meta.redirectAuthenticated && session.isAuthenticated.value) {
     return { name: 'dashboard' }
   }
   return true

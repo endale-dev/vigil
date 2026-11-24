@@ -12,7 +12,10 @@ const title = computed(() => route.meta.title ?? 'Vigil')
   <div class="min-h-screen bg-slate-950 text-slate-100">
     <header class="border-b border-slate-800 px-6 py-4">
       <nav class="mx-auto flex max-w-6xl items-center justify-between" aria-label="Main navigation">
-        <RouterLink class="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4" to="/dashboard">
+        <RouterLink
+          class="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4"
+          :to="isAuthenticated ? { name: 'dashboard' } : { name: 'home' }"
+        >
           Vigil
         </RouterLink>
         <div class="flex items-center gap-5 text-sm">
