@@ -34,13 +34,15 @@ func RunWithShutdown(ctx context.Context, addr string, logger *slog.Logger, onSt
 }
 
 func RunWithRoutes(ctx context.Context, addr string, appEnv string, embeddedFrontend fs.FS, handlers routes.Handlers, requireAuth func(http.Handler) http.Handler, trustProxyHeaders bool, logger *slog.Logger, onStopAccepting func()) error {
-	if err := ValidateSPA(appEnv, embeddedFrontend); err != nil {
+	assets, err := embeddedSPA(appEnv, embeddedFrontend)
+	if err != nil {
 		return err
 	}
 	mux, err := routes.New(handlers, requireAuth)
 	if err != nil {
 		return err
 	}
+	mux.Handle("/", NewSPAHandler(assets))
 	limiter := NewRateLimiter(trustProxyHeaders)
 	requestHandler := RequestLog(logger)(Recover(logger)(SecurityHeaders(CSRF(RateLimit(limiter)(mux)))))
 	cleanupCtx, stopCleanup := context.WithCancel(ctx)
