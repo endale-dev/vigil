@@ -1,0 +1,24 @@
+{
+  "name": "vigil-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "vue": "3.5.46",
+    "vue-router": "4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@vitejs/plugin-vue": "6.0.11",
+    "tailwindcss": "4.3.5",
+    "typescript": "6.0.3",
+    "vite": "8.3.8",
+    "vue-tsc": "3.3.14"
+  }
+}
