@@ -32,21 +32,24 @@ func NewAccountService(users domain.UserRepository, telegramEnabled bool, notifi
 	return account, nil
 }
 
-func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings) error {
+func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings) (*domain.User, error) {
 	if notify.TelegramChatID != "" {
 		if !account.telegramEnabled {
-			return apperrors.ErrProviderDisabled
+			return nil, apperrors.ErrProviderDisabled
 		}
 		if !validTelegramChatID(notify.TelegramChatID) {
-			return apperrors.ValidationError{Field: "telegramChatId", Message: "must be empty or a 5 to 20 digit chat ID"}
+			return nil, apperrors.ValidationError{Field: "telegramChatId", Message: "must be empty or a 5 to 20 digit chat ID"}
 		}
 	}
 	user, err := account.users.GetByID(ctx, userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	user.Notify = notify
-	return account.users.Update(ctx, user)
+	if err := account.users.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func validTelegramChatID(chatID string) bool {
@@ -65,16 +68,19 @@ func validTelegramChatID(chatID string) bool {
 	return true
 }
 
-func (account *AccountService) UpdateStatusSlug(ctx context.Context, userID domain.ID, slug string) error {
+func (account *AccountService) UpdateStatusSlug(ctx context.Context, userID domain.ID, slug string) (*domain.User, error) {
 	if err := domain.ValidateSlug(slug); err != nil {
-		return err
+		return nil, err
 	}
 	user, err := account.users.GetByID(ctx, userID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	user.StatusSlug = slug
-	return account.users.Update(ctx, user)
+	if err := account.users.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func (account *AccountService) SendTestAlert(ctx context.Context, userID domain.ID, channel domain.Channel) error {
