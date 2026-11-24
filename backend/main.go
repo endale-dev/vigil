@@ -78,7 +78,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	return runLifecycle(ctx,
 		func(ctx context.Context, onStopAccepting func()) error {
 			return server.RunWithRoutes(
-				ctx, cfg.AppAddr, handlers, server.RequireAuth(dependencies.authentication),
+				ctx, cfg.AppAddr, cfg.AppEnv, nil, handlers, server.RequireAuth(dependencies.authentication),
 				cfg.TrustProxyHeaders, logger, onStopAccepting,
 			)
 		},

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/endale-dev/vigil/internal/routes"
 )
 
 func TestRunStopsAfterCancellation(t *testing.T) {
@@ -34,5 +36,12 @@ func TestRunReportsListenFailure(t *testing.T) {
 	err := Run(context.Background(), "not-an-address", slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
 	if err == nil {
 		t.Fatal("expected listen error")
+	}
+}
+
+func TestRunWithRoutesRequiresProductionFrontendBeforeListening(t *testing.T) {
+	err := RunWithRoutes(context.Background(), "not-an-address", "production", nil, routes.Handlers{}, nil, false, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)), nil)
+	if err == nil || err.Error() != missingSPAError {
+		t.Fatalf("RunWithRoutes() error = %v, want missing frontend build error", err)
 	}
 }

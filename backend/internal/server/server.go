@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -32,7 +33,10 @@ func RunWithShutdown(ctx context.Context, addr string, logger *slog.Logger, onSt
 	return runWithHandler(ctx, addr, New(addr).Handler, logger, onStopAccepting, nil)
 }
 
-func RunWithRoutes(ctx context.Context, addr string, handlers routes.Handlers, requireAuth func(http.Handler) http.Handler, trustProxyHeaders bool, logger *slog.Logger, onStopAccepting func()) error {
+func RunWithRoutes(ctx context.Context, addr string, appEnv string, embeddedFrontend fs.FS, handlers routes.Handlers, requireAuth func(http.Handler) http.Handler, trustProxyHeaders bool, logger *slog.Logger, onStopAccepting func()) error {
+	if err := ValidateSPA(appEnv, embeddedFrontend); err != nil {
+		return err
+	}
 	mux, err := routes.New(handlers, requireAuth)
 	if err != nil {
 		return err
