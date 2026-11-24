@@ -46,9 +46,10 @@ check: test build lint deadcode web
 
 web:
 	$(if $(wildcard frontend/package.json),,$(error frontend/package.json is missing; the frontend has not been initialized yet))
-	$(NPM) --prefix frontend ci
+	$(if $(wildcard frontend/node_modules/vite/package.json),,$(NPM) --prefix frontend ci)
 	$(NPM) --prefix frontend run typecheck
 	$(NPM) --prefix frontend run build
+	node -e "require('node:fs').cpSync('frontend/dist', 'backend/dist', { recursive: true })"
 
 docker:
 	$(if $(wildcard backend/Dockerfile),,$(error backend/Dockerfile is missing; container packaging has not been added yet))
