@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -62,22 +63,55 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	results := make(chan error, 2)
-	go func() { results <- server.Run(runCtx, cfg.AppAddr, logger) }()
-	go func() { results <- dependencies.scheduler.Run(runCtx) }()
+	return runProcesses(ctx,
+		func(ctx context.Context, onStopAccepting func()) error {
+			return server.RunWithShutdown(ctx, cfg.AppAddr, logger, onStopAccepting)
+		},
+		dependencies.scheduler.Run,
+	)
+}
 
-	firstErr := <-results
-	cancel()
-	secondErr := <-results
-	if firstErr != nil && !errors.Is(firstErr, context.Canceled) {
-		return firstErr
+func runProcesses(ctx context.Context, runHTTP func(context.Context, func()) error, runScheduler func(context.Context) error) error {
+	httpCtx, stopHTTP := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopHTTP()
+	schedulerCtx, stopScheduler := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopScheduler()
+	var stopSchedulerOnce sync.Once
+	stopSchedulerAfterHTTP := func() { stopSchedulerOnce.Do(stopScheduler) }
+
+	httpDone := make(chan error, 1)
+	schedulerDone := make(chan error, 1)
+	go func() {
+		err := runHTTP(httpCtx, stopSchedulerAfterHTTP)
+		stopSchedulerAfterHTTP()
+		httpDone <- err
+	}()
+	go func() { schedulerDone <- runScheduler(schedulerCtx) }()
+
+	select {
+	case <-ctx.Done():
+		stopHTTP()
+		httpErr := <-httpDone
+		return processErrors(httpErr, <-schedulerDone)
+	case httpErr := <-httpDone:
+		stopHTTP()
+		stopSchedulerAfterHTTP()
+		return processErrors(httpErr, <-schedulerDone)
+	case schedulerErr := <-schedulerDone:
+		stopHTTP()
+		stopSchedulerAfterHTTP()
+		return processErrors(schedulerErr, <-httpDone)
 	}
-	if secondErr != nil && !errors.Is(secondErr, context.Canceled) {
-		return secondErr
+}
+
+func processErrors(first, second error) error {
+	if errors.Is(first, context.Canceled) {
+		first = nil
 	}
-	return nil
+	if errors.Is(second, context.Canceled) {
+		second = nil
+	}
+	return errors.Join(first, second)
 }
 
 type applicationDependencies struct {
