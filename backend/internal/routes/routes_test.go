@@ -17,6 +17,9 @@ func (recorder *routeRecorder) respond(name string, writer http.ResponseWriter) 
 
 type authenticationRecorder struct{ *routeRecorder }
 
+func (recorder authenticationRecorder) Capabilities(w http.ResponseWriter, _ *http.Request) {
+	recorder.respond("capabilities", w)
+}
 func (recorder authenticationRecorder) Register(w http.ResponseWriter, _ *http.Request) {
 	recorder.respond("register", w)
 }
@@ -125,6 +128,7 @@ func TestNewRegistersEveryAPIEndpointOnceAndProtectsOnlyRequiredRoutes(t *testin
 		handler   string
 		protected bool
 	}{
+		{http.MethodGet, "/api/auth/capabilities", "capabilities", false},
 		{http.MethodPost, "/api/auth/register", "register", false},
 		{http.MethodPost, "/api/auth/login", "login", false},
 		{http.MethodPost, "/api/auth/logout", "logout", false},
@@ -165,8 +169,8 @@ func TestNewRegistersEveryAPIEndpointOnceAndProtectsOnlyRequiredRoutes(t *testin
 		}
 		authenticated = 0
 	}
-	if len(tests) != 23 || len(recorder.calls) != 23 {
-		t.Fatalf("registered %d handlers for %d endpoint checks, want 23", len(recorder.calls), len(tests))
+	if len(tests) != 24 || len(recorder.calls) != 24 {
+		t.Fatalf("registered %d handlers for %d endpoint checks, want 24", len(recorder.calls), len(tests))
 	}
 	for name, calls := range recorder.calls {
 		if calls != 1 {

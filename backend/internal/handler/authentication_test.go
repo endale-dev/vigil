@@ -170,6 +170,22 @@ func TestLoginHandlerCreatesSessionCookieAndUserDTO(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesHandlerReturnsConfiguredFeatures(t *testing.T) {
+	handler := newAuthenticationHandlerForTest(t, &authenticationStub{}, false)
+	response := httptest.NewRecorder()
+	handler.Capabilities(response, httptest.NewRequest(http.MethodGet, "/api/auth/capabilities", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	}
+	var capabilities CapabilitiesDTO
+	if err := json.NewDecoder(response.Body).Decode(&capabilities); err != nil {
+		t.Fatal(err)
+	}
+	if !capabilities.Google || !capabilities.Telegram {
+		t.Fatalf("capabilities = %+v, want configured features", capabilities)
+	}
+}
+
 func TestLoginHandlerMapsErrorsWithoutSettingSession(t *testing.T) {
 	serviceStub := &authenticationStub{loginError: apperrors.ErrInvalidCredentials}
 	handler := newAuthenticationHandlerForTest(t, serviceStub, false)

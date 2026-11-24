@@ -87,6 +87,10 @@ func (handler *AuthenticationHandler) Login(writer http.ResponseWriter, request 
 	))
 }
 
+func (handler *AuthenticationHandler) Capabilities(writer http.ResponseWriter, _ *http.Request) {
+	handler.writeJSON(writer, http.StatusOK, handler.capabilities)
+}
+
 func (handler *AuthenticationHandler) Logout(writer http.ResponseWriter, request *http.Request) {
 	cookie, err := request.Cookie(sessionCookieName)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 )
 
 type AuthenticationHandler interface {
+	Capabilities(http.ResponseWriter, *http.Request)
 	Register(http.ResponseWriter, *http.Request)
 	Login(http.ResponseWriter, *http.Request)
 	Logout(http.ResponseWriter, *http.Request)
@@ -61,6 +62,7 @@ func New(handlers Handlers, requireAuth func(http.Handler) http.Handler) (*http.
 		handler       http.Handler
 		authenticated bool
 	}{
+		{"GET /api/auth/capabilities", http.HandlerFunc(handlers.Authentication.Capabilities), false},
 		{"POST /api/auth/register", http.HandlerFunc(handlers.Authentication.Register), false},
 		{"POST /api/auth/login", http.HandlerFunc(handlers.Authentication.Login), false},
 		{"POST /api/auth/logout", http.HandlerFunc(handlers.Authentication.Logout), false},

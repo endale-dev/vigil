@@ -1,5 +1,9 @@
 import { apiRequest } from './client'
-import type { LoginRequest, RegisterRequest, UserDTO } from './types'
+import type { CapabilitiesDTO, LoginRequest, RegisterRequest, UserDTO } from './types'
+
+export function getCapabilities(): Promise<CapabilitiesDTO> {
+  return apiRequest<CapabilitiesDTO>('/api/auth/capabilities')
+}
 
 export function register(input: RegisterRequest): Promise<UserDTO> {
   return apiRequest<UserDTO>('/api/auth/register', {

@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
 import NotFoundView from '../views/NotFoundView.vue'
+import LoginView from '../views/LoginView.vue'
+import RegisterView from '../views/RegisterView.vue'
 import { useSession } from '../composables/useSession'
 
 declare module 'vue-router' {
@@ -15,8 +17,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: { name: 'dashboard' } },
-    { path: '/login', name: 'login', component: AppShell, meta: { title: 'Sign in', guestOnly: true } },
-    { path: '/register', name: 'register', component: AppShell, meta: { title: 'Create account', guestOnly: true } },
+    { path: '/login', name: 'login', component: LoginView, meta: { title: 'Sign in', guestOnly: true } },
+    { path: '/register', name: 'register', component: RegisterView, meta: { title: 'Create account', guestOnly: true } },
     { path: '/forgot-password', name: 'forgot-password', component: AppShell, meta: { title: 'Reset password' } },
     { path: '/reset-password', name: 'reset-password', component: AppShell, meta: { title: 'Choose a new password' } },
     { path: '/dashboard', name: 'dashboard', component: AppShell, meta: { title: 'Dashboard', requiresAuth: true } },
