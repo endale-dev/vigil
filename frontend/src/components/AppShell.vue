@@ -47,6 +47,7 @@ const title = computed(() => route.meta.title ?? 'Vigil')
     </header>
     <main class="mx-auto max-w-6xl px-6 py-8">
       <h1 class="text-2xl font-semibold">{{ title }}</h1>
+      <slot />
     </main>
   </div>
 </template>
