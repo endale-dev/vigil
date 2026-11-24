@@ -17,6 +17,7 @@ const errorMessage = ref('')
 const submitting = ref(false)
 const googleEnabled = ref(false)
 const googleError = computed(() => route.query.error === 'google')
+const resetSuccess = computed(() => route.query.reset === 'success')
 
 onMounted(async () => {
   try {
@@ -73,6 +74,9 @@ async function submit(): Promise<void> {
 
       <p v-if="googleError" class="mt-5 rounded-md border border-red-800 bg-red-950/60 p-3 text-sm text-red-200" role="alert">
         Google sign-in did not work. Please try again or use your email and password.
+      </p>
+      <p v-if="resetSuccess" class="mt-5 rounded-md border border-emerald-800 bg-emerald-950/60 p-3 text-sm text-emerald-200" role="status">
+        Your password was reset. Sign in with your new password.
       </p>
       <p v-if="errorMessage" class="mt-5 rounded-md border border-red-800 bg-red-950/60 p-3 text-sm text-red-200" role="alert">
         {{ errorMessage }}

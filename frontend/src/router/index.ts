@@ -2,8 +2,10 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 import HomeView from '../views/HomeView.vue'
+import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
+import ResetPasswordView from '../views/ResetPasswordView.vue'
 import { useSession } from '../composables/useSession'
 
 declare module 'vue-router' {
@@ -21,8 +23,8 @@ const router = createRouter({
     { path: '/', name: 'home', component: HomeView, meta: { title: 'Vigil', redirectAuthenticated: true } },
     { path: '/login', name: 'login', component: LoginView, meta: { title: 'Sign in', guestOnly: true } },
     { path: '/register', name: 'register', component: RegisterView, meta: { title: 'Create account', guestOnly: true } },
-    { path: '/forgot-password', name: 'forgot-password', component: AppShell, meta: { title: 'Reset password' } },
-    { path: '/reset-password', name: 'reset-password', component: AppShell, meta: { title: 'Choose a new password' } },
+    { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { title: 'Reset password' } },
+    { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { title: 'Choose a new password' } },
     { path: '/dashboard', name: 'dashboard', component: AppShell, meta: { title: 'Dashboard', requiresAuth: true } },
     { path: '/monitors/:id', name: 'monitor-detail', component: AppShell, meta: { title: 'Monitor', requiresAuth: true } },
     { path: '/settings', name: 'settings', component: AppShell, meta: { title: 'Settings', requiresAuth: true } },
