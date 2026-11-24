@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/endale-dev/vigil/internal/config"
+	"github.com/endale-dev/vigil/internal/handler"
 	"github.com/endale-dev/vigil/internal/logging"
 	"github.com/endale-dev/vigil/internal/platform/clock"
 	"github.com/endale-dev/vigil/internal/platform/google"
@@ -20,6 +21,7 @@ import (
 	"github.com/endale-dev/vigil/internal/platform/probe"
 	"github.com/endale-dev/vigil/internal/platform/security"
 	"github.com/endale-dev/vigil/internal/repository/mongo"
+	"github.com/endale-dev/vigil/internal/routes"
 	"github.com/endale-dev/vigil/internal/scheduler"
 	"github.com/endale-dev/vigil/internal/server"
 	"github.com/endale-dev/vigil/internal/service"
@@ -68,10 +70,17 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	handlers, err := buildHandlers(cfg, client, dependencies, logger)
+	if err != nil {
+		return err
+	}
 
 	return runLifecycle(ctx,
 		func(ctx context.Context, onStopAccepting func()) error {
-			return server.RunWithShutdown(ctx, cfg.AppAddr, logger, onStopAccepting)
+			return server.RunWithRoutes(
+				ctx, cfg.AppAddr, handlers, server.RequireAuth(dependencies.authentication),
+				cfg.TrustProxyHeaders, logger, onStopAccepting,
+			)
 		},
 		dependencies.scheduler.Run,
 		closeClient,
@@ -189,6 +198,37 @@ func buildDependencies(cfg config.Config, client *mongo.Client, logger *slog.Log
 		monitors:       monitorService,
 		status:         status,
 		scheduler:      monitorScheduler,
+	}, nil
+}
+
+func buildHandlers(cfg config.Config, client *mongo.Client, dependencies applicationDependencies, logger *slog.Logger) (routes.Handlers, error) {
+	capabilities := handler.CapabilitiesDTO{Google: cfg.GoogleClientID != "", Telegram: cfg.TelegramBotToken != ""}
+	authentication, err := handler.NewAuthenticationHandler(dependencies.authentication, cfg.CookieSecure, capabilities, logger)
+	if err != nil {
+		return routes.Handlers{}, err
+	}
+	account, err := handler.NewAccountHandler(dependencies.authentication, dependencies.account, capabilities, logger)
+	if err != nil {
+		return routes.Handlers{}, err
+	}
+	monitors, err := handler.NewMonitorHandler(dependencies.authentication, dependencies.monitors, logger)
+	if err != nil {
+		return routes.Handlers{}, err
+	}
+	publicStatus, err := handler.NewPublicStatusHandler(dependencies.status, logger)
+	if err != nil {
+		return routes.Handlers{}, err
+	}
+	health, err := handler.NewHealthHandler(client)
+	if err != nil {
+		return routes.Handlers{}, err
+	}
+	return routes.Handlers{
+		Authentication: authentication,
+		Account:        account,
+		Monitors:       monitors,
+		PublicStatus:   publicStatus,
+		Health:         health,
 	}, nil
 }
 

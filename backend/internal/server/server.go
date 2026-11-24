@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/endale-dev/vigil/internal/routes"
 )
 
 func New(addr string) *http.Server {
@@ -27,14 +29,47 @@ func Run(ctx context.Context, addr string, logger *slog.Logger) error {
 }
 
 func RunWithShutdown(ctx context.Context, addr string, logger *slog.Logger, onStopAccepting func()) error {
+	return runWithHandler(ctx, addr, New(addr).Handler, logger, onStopAccepting, nil)
+}
+
+func RunWithRoutes(ctx context.Context, addr string, handlers routes.Handlers, requireAuth func(http.Handler) http.Handler, trustProxyHeaders bool, logger *slog.Logger, onStopAccepting func()) error {
+	mux, err := routes.New(handlers, requireAuth)
+	if err != nil {
+		return err
+	}
+	limiter := NewRateLimiter(trustProxyHeaders)
+	requestHandler := RequestLog(logger)(Recover(logger)(SecurityHeaders(CSRF(RateLimit(limiter)(mux)))))
+	cleanupCtx, stopCleanup := context.WithCancel(ctx)
+	defer stopCleanup()
+	cleanupDone := make(chan struct{})
+	cleanupStarted := false
+	err = runWithHandler(ctx, addr, requestHandler, logger, onStopAccepting, func() {
+		cleanupStarted = true
+		go func() {
+			defer close(cleanupDone)
+			limiter.RunCleanup(cleanupCtx)
+		}()
+	})
+	stopCleanup()
+	if cleanupStarted {
+		<-cleanupDone
+	}
+	return err
+}
+
+func runWithHandler(ctx context.Context, addr string, handler http.Handler, logger *slog.Logger, onStopAccepting func(), onStart func()) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 
 	httpServer := New(addr)
+	httpServer.Handler = handler
 	if onStopAccepting != nil {
 		httpServer.RegisterOnShutdown(onStopAccepting)
+	}
+	if onStart != nil {
+		onStart()
 	}
 	serveErr := make(chan error, 1)
 	go func() {
