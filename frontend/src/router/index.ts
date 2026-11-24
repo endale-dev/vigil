@@ -8,6 +8,7 @@ import LoginView from '../views/LoginView.vue'
 import MonitorDetailView from '../views/MonitorDetailView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
+import SettingsView from '../views/SettingsView.vue'
 import { useSession } from '../composables/useSession'
 
 declare module 'vue-router' {
@@ -29,7 +30,7 @@ const router = createRouter({
     { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { title: 'Choose a new password' } },
     { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { title: 'Dashboard', requiresAuth: true } },
     { path: '/monitors/:id', name: 'monitor-detail', component: MonitorDetailView, meta: { title: 'Monitor', requiresAuth: true } },
-    { path: '/settings', name: 'settings', component: AppShell, meta: { title: 'Settings', requiresAuth: true } },
+    { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Settings', requiresAuth: true } },
     { path: '/status/:slug', name: 'public-status', component: AppShell, meta: { title: 'Public status' } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
   ],
