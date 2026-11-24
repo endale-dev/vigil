@@ -45,13 +45,19 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
+	clientClosed := false
+	closeClient := func() {
+		if clientClosed {
+			return
+		}
+		clientClosed = true
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := client.Close(closeCtx); err != nil {
 			logger.Error("MongoDB disconnect failed")
 		}
-	}()
+	}
+	defer closeClient()
 
 	database := client.Database()
 	if err := mongo.CreateIndexes(ctx, database, cfg.CheckRetention); err != nil {
@@ -63,12 +69,19 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 
-	return runProcesses(ctx,
+	return runLifecycle(ctx,
 		func(ctx context.Context, onStopAccepting func()) error {
 			return server.RunWithShutdown(ctx, cfg.AppAddr, logger, onStopAccepting)
 		},
 		dependencies.scheduler.Run,
+		closeClient,
 	)
+}
+
+func runLifecycle(ctx context.Context, runHTTP func(context.Context, func()) error, runScheduler func(context.Context) error, closeDependencies func()) error {
+	err := runProcesses(ctx, runHTTP, runScheduler)
+	closeDependencies()
+	return err
 }
 
 func runProcesses(ctx context.Context, runHTTP func(context.Context, func()) error, runScheduler func(context.Context) error) error {
