@@ -1,3 +1,6 @@
-﻿/node_modules/
+/node_modules/
 /dist/**
 !/dist/.gitkeep
+.env.local
+.env.*.local
+*.local
