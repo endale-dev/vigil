@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/endale-dev/vigil/internal/domain"
-	apperrors "github.com/endale-dev/vigil/internal/errors"
 	"github.com/endale-dev/vigil/internal/service"
 )
 
@@ -111,12 +110,7 @@ func (handler *AuthenticationHandler) Logout(writer http.ResponseWriter, request
 }
 
 func (handler *AuthenticationHandler) Me(writer http.ResponseWriter, request *http.Request) {
-	cookie, err := request.Cookie(sessionCookieName)
-	if err != nil {
-		handler.writeError(writer, apperrors.ErrUnauthenticated)
-		return
-	}
-	session, err := handler.authentication.Authenticate(request.Context(), cookie.Value)
+	session, err := authenticatedSession(request, handler.authentication)
 	if err != nil {
 		handler.writeError(writer, err)
 		return

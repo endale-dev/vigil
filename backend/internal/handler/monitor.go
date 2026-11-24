@@ -254,12 +254,7 @@ func durationFromSeconds(seconds int64, field string) (time.Duration, error) {
 }
 
 func (handler *MonitorHandler) currentSession(writer http.ResponseWriter, request *http.Request) (service.AuthenticatedSession, bool) {
-	cookie, err := request.Cookie(sessionCookieName)
-	if err != nil {
-		handler.writeError(writer, apperrors.ErrUnauthenticated)
-		return service.AuthenticatedSession{}, false
-	}
-	session, err := handler.authentication.Authenticate(request.Context(), cookie.Value)
+	session, err := authenticatedSession(request, handler.authentication)
 	if err != nil {
 		handler.writeError(writer, err)
 		return service.AuthenticatedSession{}, false

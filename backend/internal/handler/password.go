@@ -2,8 +2,6 @@ package handler
 
 import (
 	"net/http"
-
-	apperrors "github.com/endale-dev/vigil/internal/errors"
 )
 
 type forgotPasswordRequest struct {
@@ -47,12 +45,7 @@ func (handler *AuthenticationHandler) ResetPassword(writer http.ResponseWriter, 
 }
 
 func (handler *AuthenticationHandler) ChangePassword(writer http.ResponseWriter, request *http.Request) {
-	cookie, err := request.Cookie(sessionCookieName)
-	if err != nil {
-		handler.writeError(writer, apperrors.ErrUnauthenticated)
-		return
-	}
-	session, err := handler.authentication.Authenticate(request.Context(), cookie.Value)
+	session, err := authenticatedSession(request, handler.authentication)
 	if err != nil {
 		handler.writeError(writer, err)
 		return
