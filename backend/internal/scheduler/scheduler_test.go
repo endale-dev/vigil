@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,6 +102,89 @@ func TestSchedulerStopsClaimingAfterNoDueMonitor(t *testing.T) {
 	}
 }
 
+func TestSchedulerWaitsForChecksWhenCanceled(t *testing.T) {
+	repository := &claimRepository{claims: []*domain.MonitorClaim{
+		{Monitor: domain.Monitor{ID: "monitor-1", Timeout: time.Minute}, ClaimToken: "claim-1"},
+		{Monitor: domain.Monitor{ID: "monitor-2", Timeout: time.Minute}, ClaimToken: "claim-2"},
+	}}
+	runner := &nonCooperativeRunner{started: make(chan struct{}, 1), release: make(chan struct{}), finished: make(chan struct{}, 1)}
+	scheduler, err := New(repository, runner, &fixedClock{now: time.Now()}, 5*time.Millisecond, 1, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- scheduler.Run(ctx) }()
+	select {
+	case <-runner.started:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not start the check")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		t.Fatalf("Run() returned before the check drained: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+	close(runner.release)
+	select {
+	case <-runner.finished:
+	case <-time.After(time.Second):
+		t.Fatal("check did not finish")
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Run() did not return after checks drained")
+	}
+	if repository.calls != 1 {
+		t.Fatalf("claims after cancellation = %d, want 1", repository.calls)
+	}
+}
+
+func TestSchedulerRecoversFromWorkerPanic(t *testing.T) {
+	var logs strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	repository := &claimRepository{claims: []*domain.MonitorClaim{
+		{Monitor: domain.Monitor{ID: "monitor-1", Timeout: time.Minute}, ClaimToken: "claim-1"},
+		{Monitor: domain.Monitor{ID: "monitor-2", Timeout: time.Minute}, ClaimToken: "claim-2"},
+	}}
+	runner := &panicOnceRunner{started: make(chan struct{}, 1), release: make(chan struct{}), finished: make(chan struct{}, 1)}
+	scheduler, err := New(repository, runner, &fixedClock{now: time.Now()}, 5*time.Millisecond, 1, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- scheduler.Run(ctx) }()
+	select {
+	case <-runner.started:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not run the monitor after the panic")
+	}
+	if strings.Contains(logs.String(), "private panic detail") || !strings.Contains(logs.String(), "monitor check panicked") {
+		t.Fatalf("panic log = %s", logs.String())
+	}
+	close(runner.release)
+	select {
+	case <-runner.finished:
+	case <-time.After(time.Second):
+		t.Fatal("check did not finish")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not stop")
+	}
+}
+
 type claimRepository struct {
 	domain.MonitorRepository
 	claims     []*domain.MonitorClaim
@@ -137,6 +221,37 @@ type blockingRunner struct {
 	started  chan runObservation
 	release  chan struct{}
 	finished chan struct{}
+}
+
+type nonCooperativeRunner struct {
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+}
+
+func (runner *nonCooperativeRunner) Run(context.Context, domain.Monitor, string) error {
+	runner.started <- struct{}{}
+	<-runner.release
+	runner.finished <- struct{}{}
+	return nil
+}
+
+type panicOnceRunner struct {
+	calls    int
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+}
+
+func (runner *panicOnceRunner) Run(context.Context, domain.Monitor, string) error {
+	runner.calls++
+	if runner.calls == 1 {
+		panic("private panic detail")
+	}
+	runner.started <- struct{}{}
+	<-runner.release
+	runner.finished <- struct{}{}
+	return nil
 }
 
 func (runner *blockingRunner) Run(ctx context.Context, monitor domain.Monitor, _ string) error {

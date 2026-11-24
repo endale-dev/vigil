@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/endale-dev/vigil/internal/domain"
@@ -35,16 +36,21 @@ func (scheduler *Scheduler) Run(ctx context.Context) error {
 	ticker := time.NewTicker(scheduler.interval)
 	defer ticker.Stop()
 	semaphore := make(chan struct{}, scheduler.workers)
+	var checks sync.WaitGroup
 
 	for {
 		select {
 		case <-ctx.Done():
+			checks.Wait()
 			return nil
 		case <-ticker.C:
 		}
 
 	claimLoop:
 		for {
+			if ctx.Err() != nil {
+				break claimLoop
+			}
 			select {
 			case semaphore <- struct{}{}:
 			default:
@@ -53,6 +59,9 @@ func (scheduler *Scheduler) Run(ctx context.Context) error {
 			claim, err := scheduler.monitors.ClaimDue(ctx, scheduler.clock.Now())
 			if err != nil {
 				<-semaphore
+				if ctx.Err() != nil {
+					break claimLoop
+				}
 				if !errors.Is(err, apperrors.ErrNotFound) {
 					scheduler.logger.ErrorContext(ctx, "could not claim due monitor")
 				}
@@ -63,15 +72,22 @@ func (scheduler *Scheduler) Run(ctx context.Context) error {
 				scheduler.logger.ErrorContext(ctx, "monitor repository returned an empty claim")
 				break claimLoop
 			}
-			go scheduler.runCheck(ctx, semaphore, claim)
+			checks.Add(1)
+			go scheduler.runCheck(ctx, semaphore, claim, &checks)
 		}
 	}
 }
 
-func (scheduler *Scheduler) runCheck(ctx context.Context, semaphore chan struct{}, claim *domain.MonitorClaim) {
+func (scheduler *Scheduler) runCheck(ctx context.Context, semaphore chan struct{}, claim *domain.MonitorClaim, checks *sync.WaitGroup) {
+	defer checks.Done()
 	defer func() { <-semaphore }()
 	checkCtx, cancel := context.WithTimeout(ctx, claim.Monitor.Timeout)
 	defer cancel()
+	defer func() {
+		if recover() != nil {
+			scheduler.logger.ErrorContext(ctx, "monitor check panicked")
+		}
+	}()
 	if err := scheduler.checks.Run(checkCtx, claim.Monitor, claim.ClaimToken); err != nil {
 		scheduler.logger.ErrorContext(ctx, "monitor check failed")
 	}
