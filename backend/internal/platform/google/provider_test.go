@@ -91,8 +91,8 @@ func TestProviderRejectsInvalidIdentityAndSanitizesErrors(t *testing.T) {
 	}{
 		{name: "unverified", userInfo: `{"sub":"subject","email":"user@example.test","email_verified":false}`, status: http.StatusOK, wantSubstr: "not verified"},
 		{name: "missing subject", userInfo: `{"email":"user@example.test","email_verified":true}`, status: http.StatusOK, wantSubstr: "not verified"},
-		{name: "token endpoint failure", status: http.StatusBadGateway, wantErr: "Google token exchange failed"},
-		{name: "userinfo endpoint failure", userInfo: `{"error":"access-secret"}`, status: http.StatusBadGateway, wantErr: "Google identity lookup failed"},
+		{name: "token endpoint failure", status: http.StatusBadGateway, wantErr: "google token exchange failed"},
+		{name: "userinfo endpoint failure", userInfo: `{"error":"access-secret"}`, status: http.StatusBadGateway, wantErr: "google identity lookup failed"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {

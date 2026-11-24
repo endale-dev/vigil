@@ -51,12 +51,12 @@ func (notifier *TelegramNotifier) Notify(ctx context.Context, user domain.User, 
 		Text   string `json:"text"`
 	}{ChatID: user.Notify.TelegramChatID, Text: message})
 	if err != nil {
-		return errors.New("Telegram notification failed")
+		return errors.New("telegram notification failed")
 	}
 	endpoint := strings.TrimRight(notifier.endpoint, "/") + "/bot" + notifier.botToken + "/sendMessage"
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return errors.New("Telegram notification failed")
+		return errors.New("telegram notification failed")
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := notifier.client.Do(request)
@@ -64,11 +64,11 @@ func (notifier *TelegramNotifier) Notify(ctx context.Context, user domain.User, 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return errors.New("Telegram notification failed")
+		return errors.New("telegram notification failed")
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("Telegram notification failed with status %d", response.StatusCode)
+		return fmt.Errorf("telegram notification failed with status %d", response.StatusCode)
 	}
 	return nil
 }

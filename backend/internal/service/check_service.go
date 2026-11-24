@@ -12,18 +12,20 @@ type CheckService struct {
 	monitors         domain.MonitorRepository
 	checks           domain.CheckRepository
 	incidents        domain.IncidentRepository
+	users            domain.UserRepository
 	prober           Prober
+	alerter          Alerter
 	clock            Clock
 	failureThreshold int
 	logger           *slog.Logger
 }
 
-func NewCheckService(monitors domain.MonitorRepository, checks domain.CheckRepository, incidents domain.IncidentRepository, prober Prober, clock Clock, failureThreshold int, logger *slog.Logger) (*CheckService, error) {
-	if monitors == nil || checks == nil || incidents == nil || prober == nil || clock == nil || failureThreshold < 1 || logger == nil {
+func NewCheckService(monitors domain.MonitorRepository, checks domain.CheckRepository, incidents domain.IncidentRepository, users domain.UserRepository, prober Prober, alerter Alerter, clock Clock, failureThreshold int, logger *slog.Logger) (*CheckService, error) {
+	if monitors == nil || checks == nil || incidents == nil || users == nil || prober == nil || alerter == nil || clock == nil || failureThreshold < 1 || logger == nil {
 		return nil, errors.New("check service dependencies are incomplete")
 	}
 	return &CheckService{
-		monitors: monitors, checks: checks, incidents: incidents, prober: prober, clock: clock,
+		monitors: monitors, checks: checks, incidents: incidents, users: users, prober: prober, alerter: alerter, clock: clock,
 		failureThreshold: failureThreshold, logger: logger,
 	}, nil
 }
@@ -60,6 +62,14 @@ func (checks *CheckService) Run(ctx context.Context, monitor domain.Monitor, cla
 			checks.logger.ErrorContext(ctx, "monitor incident could not be opened")
 			return err
 		}
+	}
+	if (status == domain.StatusDown && monitor.Status != domain.StatusDown) || (status == domain.StatusUp && monitor.Status == domain.StatusDown) {
+		owner, err := checks.users.GetByID(ctx, monitor.OwnerID)
+		if err != nil {
+			checks.logger.ErrorContext(ctx, "monitor alert owner could not be loaded")
+			return err
+		}
+		checks.alerter.Send(ctx, *owner, Alert{Monitor: monitor, Status: status, Detail: result.Detail, At: checkedAt})
 	}
 	return nil
 }

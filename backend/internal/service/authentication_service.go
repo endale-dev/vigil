@@ -80,7 +80,7 @@ func (auth *AuthenticationService) StartGoogleLogin() (GoogleLoginStart, error) 
 	challenge := base64.RawURLEncoding.EncodeToString(challengeBytes[:])
 	authorizationURL := auth.dependencies.Google.AuthURL(state, challenge)
 	if authorizationURL == "" {
-		return GoogleLoginStart{}, errors.New("Google authorization URL unavailable")
+		return GoogleLoginStart{}, errors.New("google authorization URL unavailable")
 	}
 	return GoogleLoginStart{
 		AuthorizationURL: authorizationURL,

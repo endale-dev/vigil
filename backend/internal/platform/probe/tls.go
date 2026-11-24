@@ -20,10 +20,6 @@ type tlsProber struct {
 	roots *x509.CertPool
 }
 
-func newTLSProber(allowPrivate bool, clock service.Clock) *tlsProber {
-	return &tlsProber{guard: newAddressGuard(allowPrivate), clock: clock}
-}
-
 func (prober *tlsProber) Probe(ctx context.Context, monitor domain.Monitor) service.ProbeResult {
 	host, port, err := net.SplitHostPort(monitor.Target)
 	if err != nil || host == "" {

@@ -69,7 +69,7 @@ func (provider *Provider) Exchange(ctx context.Context, code, codeVerifier strin
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.tokenEndpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return service.GoogleIdentity{}, errors.New("Google token exchange failed")
+		return service.GoogleIdentity{}, errors.New("google token exchange failed")
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	response, err := provider.client.Do(request)
@@ -77,20 +77,20 @@ func (provider *Provider) Exchange(ctx context.Context, code, codeVerifier strin
 		if ctx.Err() != nil {
 			return service.GoogleIdentity{}, ctx.Err()
 		}
-		return service.GoogleIdentity{}, errors.New("Google token exchange failed")
+		return service.GoogleIdentity{}, errors.New("google token exchange failed")
 	}
 	var token struct {
 		AccessToken string `json:"access_token"`
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices || decodeGoogleJSON(response.Body, &token) != nil || token.AccessToken == "" {
 		_ = response.Body.Close()
-		return service.GoogleIdentity{}, errors.New("Google token exchange failed")
+		return service.GoogleIdentity{}, errors.New("google token exchange failed")
 	}
 	_ = response.Body.Close()
 
 	request, err = http.NewRequestWithContext(ctx, http.MethodGet, provider.userInfoEndpoint, nil)
 	if err != nil {
-		return service.GoogleIdentity{}, errors.New("Google identity lookup failed")
+		return service.GoogleIdentity{}, errors.New("google identity lookup failed")
 	}
 	request.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	response, err = provider.client.Do(request)
@@ -98,11 +98,11 @@ func (provider *Provider) Exchange(ctx context.Context, code, codeVerifier strin
 		if ctx.Err() != nil {
 			return service.GoogleIdentity{}, ctx.Err()
 		}
-		return service.GoogleIdentity{}, errors.New("Google identity lookup failed")
+		return service.GoogleIdentity{}, errors.New("google identity lookup failed")
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return service.GoogleIdentity{}, errors.New("Google identity lookup failed")
+		return service.GoogleIdentity{}, errors.New("google identity lookup failed")
 	}
 	var profile struct {
 		Sub           string `json:"sub"`
@@ -111,10 +111,10 @@ func (provider *Provider) Exchange(ctx context.Context, code, codeVerifier strin
 		EmailVerified bool   `json:"email_verified"`
 	}
 	if err := decodeGoogleJSON(response.Body, &profile); err != nil {
-		return service.GoogleIdentity{}, errors.New("Google identity lookup failed")
+		return service.GoogleIdentity{}, errors.New("google identity lookup failed")
 	}
 	if profile.Sub == "" || profile.Email == "" || !profile.EmailVerified {
-		return service.GoogleIdentity{}, errors.New("Google identity is not verified")
+		return service.GoogleIdentity{}, errors.New("google identity is not verified")
 	}
 	return service.GoogleIdentity{
 		Sub:           profile.Sub,
