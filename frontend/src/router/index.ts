@@ -5,6 +5,7 @@ import HomeView from '../views/HomeView.vue'
 import DashboardView from '../views/DashboardView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import LoginView from '../views/LoginView.vue'
+import MonitorDetailView from '../views/MonitorDetailView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
 import { useSession } from '../composables/useSession'
@@ -27,7 +28,7 @@ const router = createRouter({
     { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView, meta: { title: 'Reset password' } },
     { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { title: 'Choose a new password' } },
     { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { title: 'Dashboard', requiresAuth: true } },
-    { path: '/monitors/:id', name: 'monitor-detail', component: AppShell, meta: { title: 'Monitor', requiresAuth: true } },
+    { path: '/monitors/:id', name: 'monitor-detail', component: MonitorDetailView, meta: { title: 'Monitor', requiresAuth: true } },
     { path: '/settings', name: 'settings', component: AppShell, meta: { title: 'Settings', requiresAuth: true } },
     { path: '/status/:slug', name: 'public-status', component: AppShell, meta: { title: 'Public status' } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
