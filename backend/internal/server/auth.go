@@ -27,20 +27,20 @@ func RequireAuth(authentication sessionAuthenticator) func(http.Handler) http.Ha
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			if authentication == nil {
-				writeAuthError(writer, http.StatusInternalServerError, "internal server error")
+				writeServerError(writer, http.StatusInternalServerError, "internal server error")
 				return
 			}
 			cookie, err := request.Cookie(sessionCookieName)
 			if err != nil {
-				writeAuthError(writer, http.StatusUnauthorized, "unauthenticated")
+				writeServerError(writer, http.StatusUnauthorized, "unauthenticated")
 				return
 			}
 			session, err := authentication.Authenticate(request.Context(), cookie.Value)
 			if err != nil {
 				if errors.Is(err, apperrors.ErrUnauthenticated) {
-					writeAuthError(writer, http.StatusUnauthorized, "unauthenticated")
+					writeServerError(writer, http.StatusUnauthorized, "unauthenticated")
 				} else {
-					writeAuthError(writer, http.StatusInternalServerError, "internal server error")
+					writeServerError(writer, http.StatusInternalServerError, "internal server error")
 				}
 				return
 			}
@@ -50,7 +50,7 @@ func RequireAuth(authentication sessionAuthenticator) func(http.Handler) http.Ha
 	}
 }
 
-func writeAuthError(writer http.ResponseWriter, status int, message string) {
+func writeServerError(writer http.ResponseWriter, status int, message string) {
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(struct {
