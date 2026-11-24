@@ -19,6 +19,9 @@ type authenticationService interface {
 	Logout(context.Context, domain.ID) error
 	StartGoogleLogin() (service.GoogleLoginStart, error)
 	GoogleCallback(context.Context, string, string) (service.AuthenticationResult, error)
+	ForgotPassword(context.Context, string) error
+	ResetPassword(context.Context, string, string) error
+	ChangePassword(context.Context, domain.ID, domain.ID, string, string) error
 }
 
 type AuthenticationHandler struct {

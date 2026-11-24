@@ -41,6 +41,19 @@ type authenticationStub struct {
 	googleCode       string
 	googleVerifier   string
 	googleCalls      int
+	forgotError      error
+	forgotEmail      string
+	forgotCalls      int
+	resetError       error
+	resetToken       string
+	resetPassword    string
+	resetCalls       int
+	changeError      error
+	changeUserID     domain.ID
+	changeSessionID  domain.ID
+	currentPassword  string
+	newPassword      string
+	changeCalls      int
 }
 
 func (stub *authenticationStub) Register(_ context.Context, name, email, password string) (service.AuthenticationResult, error) {
@@ -77,6 +90,28 @@ func (stub *authenticationStub) GoogleCallback(_ context.Context, code, verifier
 	stub.googleCode = code
 	stub.googleVerifier = verifier
 	return stub.googleResult, stub.googleError
+}
+
+func (stub *authenticationStub) ForgotPassword(_ context.Context, email string) error {
+	stub.forgotCalls++
+	stub.forgotEmail = email
+	return stub.forgotError
+}
+
+func (stub *authenticationStub) ResetPassword(_ context.Context, token, password string) error {
+	stub.resetCalls++
+	stub.resetToken = token
+	stub.resetPassword = password
+	return stub.resetError
+}
+
+func (stub *authenticationStub) ChangePassword(_ context.Context, userID, sessionID domain.ID, currentPassword, newPassword string) error {
+	stub.changeCalls++
+	stub.changeUserID = userID
+	stub.changeSessionID = sessionID
+	stub.currentPassword = currentPassword
+	stub.newPassword = newPassword
+	return stub.changeError
 }
 
 func TestRegisterHandlerCreatesSessionCookieAndUserDTO(t *testing.T) {
