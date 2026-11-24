@@ -18,21 +18,29 @@ import (
 )
 
 type authenticationStub struct {
-	registerResult service.AuthenticationResult
-	registerError  error
-	registerInput  registerRequest
-	registerCalls  int
-	loginResult    service.AuthenticationResult
-	loginError     error
-	loginInput     loginRequest
-	loginCalls     int
-	authResult     service.AuthenticatedSession
-	authError      error
-	authToken      string
-	authCalls      int
-	logoutError    error
-	logoutSession  domain.ID
-	logoutCalls    int
+	registerResult   service.AuthenticationResult
+	registerError    error
+	registerInput    registerRequest
+	registerCalls    int
+	loginResult      service.AuthenticationResult
+	loginError       error
+	loginInput       loginRequest
+	loginCalls       int
+	authResult       service.AuthenticatedSession
+	authError        error
+	authToken        string
+	authCalls        int
+	logoutError      error
+	logoutSession    domain.ID
+	logoutCalls      int
+	googleStart      service.GoogleLoginStart
+	googleStartErr   error
+	googleStartCalls int
+	googleResult     service.AuthenticationResult
+	googleError      error
+	googleCode       string
+	googleVerifier   string
+	googleCalls      int
 }
 
 func (stub *authenticationStub) Register(_ context.Context, name, email, password string) (service.AuthenticationResult, error) {
@@ -57,6 +65,18 @@ func (stub *authenticationStub) Logout(_ context.Context, sessionID domain.ID) e
 	stub.logoutCalls++
 	stub.logoutSession = sessionID
 	return stub.logoutError
+}
+
+func (stub *authenticationStub) StartGoogleLogin() (service.GoogleLoginStart, error) {
+	stub.googleStartCalls++
+	return stub.googleStart, stub.googleStartErr
+}
+
+func (stub *authenticationStub) GoogleCallback(_ context.Context, code, verifier string) (service.AuthenticationResult, error) {
+	stub.googleCalls++
+	stub.googleCode = code
+	stub.googleVerifier = verifier
+	return stub.googleResult, stub.googleError
 }
 
 func TestRegisterHandlerCreatesSessionCookieAndUserDTO(t *testing.T) {
@@ -244,6 +264,141 @@ func TestLogoutHandlerPreservesCookieWhenSessionDeletionFails(t *testing.T) {
 	handler.Logout(response, request)
 	if response.Code != http.StatusInternalServerError || len(response.Result().Cookies()) != 0 {
 		t.Fatalf("logout failure returned %d with cookies %v", response.Code, response.Result().Cookies())
+	}
+}
+
+func TestGoogleStartRedirectsAndSetsOAuthCookies(t *testing.T) {
+	serviceStub := &authenticationStub{googleStart: service.GoogleLoginStart{
+		AuthorizationURL: "https://accounts.example/authorize", State: "oauth-state", CodeVerifier: "pkce-verifier",
+	}}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, true)
+	response := httptest.NewRecorder()
+	handler.GoogleStart(response, httptest.NewRequest(http.MethodGet, "/api/auth/google/start", nil))
+
+	if response.Code != http.StatusFound || response.Header().Get("Location") != serviceStub.googleStart.AuthorizationURL {
+		t.Fatalf("Google start status/location = %d/%q", response.Code, response.Header().Get("Location"))
+	}
+	if serviceStub.googleStartCalls != 1 {
+		t.Fatalf("Google start service calls = %d, want 1", serviceStub.googleStartCalls)
+	}
+	cookies := response.Result().Cookies()
+	if len(cookies) != 2 {
+		t.Fatalf("got %d OAuth cookies, want 2", len(cookies))
+	}
+	want := map[string]string{oauthStateCookie: "oauth-state", oauthVerifierCookie: "pkce-verifier"}
+	for _, cookie := range cookies {
+		if cookie.Value != want[cookie.Name] || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+			t.Errorf("unexpected OAuth cookie: %#v", cookie)
+		}
+		delete(want, cookie.Name)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing OAuth cookies: %v", want)
+	}
+}
+
+func TestGoogleStartReturnsNotFoundWhenProviderDisabled(t *testing.T) {
+	serviceStub := &authenticationStub{googleStartErr: apperrors.ErrProviderDisabled}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, false)
+	response := httptest.NewRecorder()
+	handler.GoogleStart(response, httptest.NewRequest(http.MethodGet, "/api/auth/google/start", nil))
+	if response.Code != http.StatusNotFound || len(response.Result().Cookies()) != 0 {
+		t.Fatalf("Google start returned status %d and cookies %v", response.Code, response.Result().Cookies())
+	}
+}
+
+func TestGoogleCallbackValidatesStateAndSetsSession(t *testing.T) {
+	expiresAt := time.Date(2026, 12, 3, 12, 0, 0, 0, time.UTC)
+	serviceStub := &authenticationStub{googleResult: service.AuthenticationResult{
+		User:         domain.User{ID: "google-user", Name: "Ada", Email: "ada@example.com", GoogleSub: "private-sub"},
+		SessionToken: "session-token", SessionExpiresAt: expiresAt,
+	}}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, true)
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=google-code&state=oauth-state", nil)
+	request.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "oauth-state"})
+	request.AddCookie(&http.Cookie{Name: oauthVerifierCookie, Value: "pkce-verifier"})
+	response := httptest.NewRecorder()
+	handler.GoogleCallback(response, request)
+
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "/" {
+		t.Fatalf("Google callback status/location = %d/%q", response.Code, response.Header().Get("Location"))
+	}
+	if serviceStub.googleCalls != 1 || serviceStub.googleCode != "google-code" || serviceStub.googleVerifier != "pkce-verifier" {
+		t.Fatalf("Google callback service args/calls = %q/%q/%d", serviceStub.googleCode, serviceStub.googleVerifier, serviceStub.googleCalls)
+	}
+	var sessionCookie *http.Cookie
+	cleared := make(map[string]bool)
+	for _, cookie := range response.Result().Cookies() {
+		switch cookie.Name {
+		case sessionCookieName:
+			sessionCookie = cookie
+		case oauthStateCookie, oauthVerifierCookie:
+			cleared[cookie.Name] = cookie.MaxAge < 0
+		}
+	}
+	if sessionCookie == nil || sessionCookie.Value != "session-token" || !sessionCookie.Expires.Equal(expiresAt) || !sessionCookie.Secure {
+		t.Fatalf("unexpected Google session cookie: %#v", sessionCookie)
+	}
+	if !cleared[oauthStateCookie] || !cleared[oauthVerifierCookie] {
+		t.Fatalf("OAuth cookies were not both cleared: %v", cleared)
+	}
+}
+
+func TestGoogleCallbackFailureClearsCookiesWithoutAuthenticating(t *testing.T) {
+	serviceStub := &authenticationStub{}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, true)
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=google-code&state=attacker-state", nil)
+	request.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "stored-state"})
+	request.AddCookie(&http.Cookie{Name: oauthVerifierCookie, Value: "pkce-verifier"})
+	response := httptest.NewRecorder()
+	handler.GoogleCallback(response, request)
+
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "/login?error=google" {
+		t.Fatalf("Google callback failure status/location = %d/%q", response.Code, response.Header().Get("Location"))
+	}
+	if serviceStub.googleCalls != 0 {
+		t.Fatalf("Google callback service was called %d times on invalid state", serviceStub.googleCalls)
+	}
+	cookies := response.Result().Cookies()
+	if len(cookies) != 2 {
+		t.Fatalf("got %d cookies, want two OAuth clear cookies", len(cookies))
+	}
+	for _, cookie := range cookies {
+		if cookie.MaxAge >= 0 || !cookie.Secure {
+			t.Errorf("OAuth cookie was not securely cleared: %#v", cookie)
+		}
+	}
+}
+
+func TestGoogleCallbackClearsCookiesWhenProviderFails(t *testing.T) {
+	serviceStub := &authenticationStub{googleError: apperrors.ErrInvalidCredentials}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, false)
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?code=google-code&state=oauth-state", nil)
+	request.AddCookie(&http.Cookie{Name: oauthStateCookie, Value: "oauth-state"})
+	request.AddCookie(&http.Cookie{Name: oauthVerifierCookie, Value: "pkce-verifier"})
+	response := httptest.NewRecorder()
+	handler.GoogleCallback(response, request)
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "/login?error=google" || serviceStub.googleCalls != 1 {
+		t.Fatalf("Google provider failure status/location/calls = %d/%q/%d", response.Code, response.Header().Get("Location"), serviceStub.googleCalls)
+	}
+	for _, cookie := range response.Result().Cookies() {
+		if cookie.Name == sessionCookieName {
+			t.Fatal("provider failure set a session cookie")
+		}
+		if cookie.MaxAge >= 0 {
+			t.Errorf("OAuth cookie was not cleared: %#v", cookie)
+		}
+	}
+}
+
+func TestValidOAuthState(t *testing.T) {
+	if !validOAuthState("same-state", "same-state") {
+		t.Fatal("matching OAuth state was rejected")
+	}
+	for _, pair := range [][2]string{{"", ""}, {"short", "different-length"}, {"other-state", "same-state"}} {
+		if validOAuthState(pair[0], pair[1]) {
+			t.Errorf("accepted mismatched OAuth state %q and %q", pair[0], pair[1])
+		}
 	}
 }
 

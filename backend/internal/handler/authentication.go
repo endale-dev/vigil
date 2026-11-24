@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,8 @@ type authenticationService interface {
 	Login(context.Context, string, string) (service.AuthenticationResult, error)
 	Authenticate(context.Context, string) (service.AuthenticatedSession, error)
 	Logout(context.Context, domain.ID) error
+	StartGoogleLogin() (service.GoogleLoginStart, error)
+	GoogleCallback(context.Context, string, string) (service.AuthenticationResult, error)
 }
 
 type AuthenticationHandler struct {
@@ -118,6 +121,45 @@ func (handler *AuthenticationHandler) Me(writer http.ResponseWriter, request *ht
 	handler.writeJSON(writer, http.StatusOK, userDTO(
 		session.User, session.HasPassword, handler.capabilities.Google, handler.capabilities.Telegram,
 	))
+}
+
+func (handler *AuthenticationHandler) GoogleStart(writer http.ResponseWriter, request *http.Request) {
+	login, err := handler.authentication.StartGoogleLogin()
+	if err != nil {
+		handler.writeError(writer, err)
+		return
+	}
+	setOAuthCookies(writer, login.State, login.CodeVerifier, handler.cookieSecure)
+	http.Redirect(writer, request, login.AuthorizationURL, http.StatusFound)
+}
+
+func (handler *AuthenticationHandler) GoogleCallback(writer http.ResponseWriter, request *http.Request) {
+	stateCookie, stateErr := request.Cookie(oauthStateCookie)
+	verifierCookie, verifierErr := request.Cookie(oauthVerifierCookie)
+	code := request.URL.Query().Get("code")
+	state := request.URL.Query().Get("state")
+	if stateErr != nil || verifierErr != nil || code == "" || !validOAuthState(state, stateCookie.Value) {
+		handler.redirectGoogleFailure(writer, request)
+		return
+	}
+
+	result, err := handler.authentication.GoogleCallback(request.Context(), code, verifierCookie.Value)
+	if err != nil {
+		handler.redirectGoogleFailure(writer, request)
+		return
+	}
+	clearOAuthCookies(writer, handler.cookieSecure)
+	setSessionCookie(writer, result.SessionToken, result.SessionExpiresAt, handler.cookieSecure)
+	http.Redirect(writer, request, "/", http.StatusFound)
+}
+
+func (handler *AuthenticationHandler) redirectGoogleFailure(writer http.ResponseWriter, request *http.Request) {
+	clearOAuthCookies(writer, handler.cookieSecure)
+	http.Redirect(writer, request, "/login?error=google", http.StatusFound)
+}
+
+func validOAuthState(query, cookie string) bool {
+	return query != "" && cookie != "" && len(query) == len(cookie) && subtle.ConstantTimeCompare([]byte(query), []byte(cookie)) == 1
 }
 
 func (handler *AuthenticationHandler) writeError(writer http.ResponseWriter, err error) {
