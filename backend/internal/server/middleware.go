@@ -46,6 +46,19 @@ func RequestLog(logger *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+func SecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'")
+		writer.Header().Set("X-Content-Type-Options", "nosniff")
+		writer.Header().Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func CSRF(next http.Handler) http.Handler {
+	return http.NewCrossOriginProtection().Handler(next)
+}
+
 type loggedResponseWriter struct {
 	http.ResponseWriter
 	status int
