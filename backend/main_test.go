@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/url"
 	"testing"
 
 	"github.com/endale-dev/vigil/internal/config"
@@ -34,5 +35,27 @@ func TestNewNotifiers(t *testing.T) {
 				t.Fatalf("second notifier is %q, want telegram", notifiers[1].Name())
 			}
 		})
+	}
+}
+
+func TestNewGoogleProvider(t *testing.T) {
+	if provider := newGoogleProvider(config.Config{}); provider != nil {
+		t.Fatal("Google provider should be disabled without credentials")
+	}
+
+	provider := newGoogleProvider(config.Config{
+		GoogleClientID:     "client-id",
+		GoogleClientSecret: "client-secret",
+		AppBaseURL:         "https://vigil.example",
+	})
+	if provider == nil {
+		t.Fatal("Google provider should be enabled with credentials")
+	}
+	authorizationURL, err := url.Parse(provider.AuthURL("state", "challenge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := authorizationURL.Query().Get("redirect_uri"), "https://vigil.example/api/auth/google/callback"; got != want {
+		t.Fatalf("got redirect URI %q, want %q", got, want)
 	}
 }

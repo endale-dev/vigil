@@ -13,9 +13,11 @@ import (
 	"github.com/endale-dev/vigil/internal/config"
 	"github.com/endale-dev/vigil/internal/logging"
 	"github.com/endale-dev/vigil/internal/platform/clock"
+	"github.com/endale-dev/vigil/internal/platform/google"
 	"github.com/endale-dev/vigil/internal/platform/mail"
 	"github.com/endale-dev/vigil/internal/platform/notify"
 	"github.com/endale-dev/vigil/internal/platform/probe"
+	"github.com/endale-dev/vigil/internal/platform/security"
 	"github.com/endale-dev/vigil/internal/repository/mongo"
 	"github.com/endale-dev/vigil/internal/scheduler"
 	"github.com/endale-dev/vigil/internal/server"
@@ -55,26 +57,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 		return err
 	}
 
-	users := mongo.NewUserRepository(database)
-	monitors := mongo.NewMonitorRepository(database)
-	checks := mongo.NewCheckRepository(database)
-	incidents := mongo.NewIncidentRepository(database)
-	appClock := clock.System{}
-	prober := probe.New(cfg.AllowPrivateTargets, appClock)
-	mailer := service.Mailer(mail.NewLogMailer(logger))
-	if cfg.SMTPHost != "" {
-		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
-	}
-	notifiers := newNotifiers(cfg, mailer)
-	alerter, err := service.NewAlertService(notifiers, logger)
-	if err != nil {
-		return err
-	}
-	checker, err := service.NewCheckService(monitors, checks, incidents, users, prober, alerter, appClock, cfg.FailureThreshold, logger)
-	if err != nil {
-		return err
-	}
-	monitorScheduler, err := scheduler.New(monitors, checker, appClock, cfg.SchedulerTick, cfg.CheckWorkers, logger)
+	dependencies, err := buildDependencies(cfg, client, logger)
 	if err != nil {
 		return err
 	}
@@ -83,7 +66,7 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	defer cancel()
 	results := make(chan error, 2)
 	go func() { results <- server.Run(runCtx, cfg.AppAddr, logger) }()
-	go func() { results <- monitorScheduler.Run(runCtx) }()
+	go func() { results <- dependencies.scheduler.Run(runCtx) }()
 
 	firstErr := <-results
 	cancel()
@@ -97,10 +80,82 @@ func run(ctx context.Context, cfg config.Config, logger *slog.Logger) error {
 	return nil
 }
 
+type applicationDependencies struct {
+	authentication *service.AuthenticationService
+	account        *service.AccountService
+	monitors       *service.MonitorService
+	status         *service.StatusService
+	scheduler      *scheduler.Scheduler
+}
+
+func buildDependencies(cfg config.Config, client *mongo.Client, logger *slog.Logger) (applicationDependencies, error) {
+	database := client.Database()
+	users := mongo.NewUserRepository(database)
+	sessions := mongo.NewSessionRepository(database)
+	passwordResets := mongo.NewPasswordResetRepository(database)
+	monitors := mongo.NewMonitorRepository(database)
+	checks := mongo.NewCheckRepository(database)
+	incidents := mongo.NewIncidentRepository(database)
+	appClock := clock.System{}
+	mailer := service.Mailer(mail.NewLogMailer(logger))
+	if cfg.SMTPHost != "" {
+		mailer = mail.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+	}
+	notifiers := newNotifiers(cfg, mailer)
+	alerter, err := service.NewAlertService(notifiers, logger)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	googleProvider := newGoogleProvider(cfg)
+	authentication, err := service.NewAuthenticationService(service.AuthenticationDependencies{
+		Users: users, Sessions: sessions, PasswordResets: passwordResets,
+		Passwords: security.NewPasswordHasher(), Tokens: security.NewTokenGenerator(),
+		Mailer: mailer, Google: googleProvider, Clock: appClock,
+		BaseURL: cfg.AppBaseURL, SessionTTL: cfg.SessionTTL, Logger: logger,
+	})
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	account, err := service.NewAccountService(users, cfg.TelegramBotToken != "", notifiers...)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	monitorService, err := service.NewMonitorService(monitors, checks, incidents, appClock, cfg.MaxMonitorsPerUser)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	status, err := service.NewStatusService(users, monitors, checks, appClock)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	checker, err := service.NewCheckService(monitors, checks, incidents, users, probe.New(cfg.AllowPrivateTargets, appClock), alerter, appClock, cfg.FailureThreshold, logger)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	monitorScheduler, err := scheduler.New(monitors, checker, appClock, cfg.SchedulerTick, cfg.CheckWorkers, logger)
+	if err != nil {
+		return applicationDependencies{}, err
+	}
+	return applicationDependencies{
+		authentication: authentication,
+		account:        account,
+		monitors:       monitorService,
+		status:         status,
+		scheduler:      monitorScheduler,
+	}, nil
+}
+
 func newNotifiers(cfg config.Config, mailer service.Mailer) []service.Notifier {
 	notifiers := []service.Notifier{notify.NewEmailNotifier(mailer)}
 	if cfg.TelegramBotToken != "" {
 		notifiers = append(notifiers, notify.NewTelegramNotifier(cfg.TelegramBotToken))
 	}
 	return notifiers
+}
+
+func newGoogleProvider(cfg config.Config) service.GoogleProvider {
+	if cfg.GoogleClientID == "" {
+		return nil
+	}
+	return google.NewProvider(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.AppBaseURL+"/api/auth/google/callback")
 }
