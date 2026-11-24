@@ -185,7 +185,7 @@ function submit(): void {
     />
 
     <label class="flex items-center gap-2 text-sm">
-      <input v-model="form.public" type="checkbox" :disabled="disabled" />
+      <input v-model="form.public" type="checkbox" class="size-4 accent-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2" :disabled="disabled" />
       Show this monitor on my public status page
     </label>
 

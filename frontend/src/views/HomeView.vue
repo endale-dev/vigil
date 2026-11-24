@@ -3,7 +3,7 @@ import { RouterLink } from 'vue-router'
 </script>
 
 <template>
-  <main class="flex min-h-screen flex-col bg-slate-950 px-6 text-slate-100">
+  <main class="flex min-h-screen flex-col bg-slate-950 px-4 text-slate-100 sm:px-6">
     <header class="mx-auto flex w-full max-w-6xl items-center justify-between py-5">
       <RouterLink class="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'home' }">
         Vigil

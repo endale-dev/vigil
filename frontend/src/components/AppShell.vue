@@ -10,15 +10,15 @@ const title = computed(() => route.meta.title ?? 'Vigil')
 
 <template>
   <div class="min-h-screen bg-slate-950 text-slate-100">
-    <header class="border-b border-slate-800 px-6 py-4">
-      <nav class="mx-auto flex max-w-6xl items-center justify-between" aria-label="Main navigation">
+    <header class="border-b border-slate-800 px-4 py-4 sm:px-6">
+      <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-3" aria-label="Main navigation">
         <RouterLink
           class="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4"
           :to="isAuthenticated ? { name: 'dashboard' } : { name: 'home' }"
         >
           Vigil
         </RouterLink>
-        <div class="flex items-center gap-5 text-sm">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm sm:gap-x-5">
           <template v-if="isAuthenticated">
             <RouterLink class="focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'dashboard' }">
               Dashboard
@@ -45,7 +45,7 @@ const title = computed(() => route.meta.title ?? 'Vigil')
         </div>
       </nav>
     </header>
-    <main class="mx-auto max-w-6xl px-6 py-8">
+    <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <h1 class="text-2xl font-semibold">{{ title }}</h1>
       <slot />
     </main>
