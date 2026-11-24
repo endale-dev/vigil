@@ -92,7 +92,10 @@ func TestRunWithHandlerDrainsRequestsBeforeReturning(t *testing.T) {
 		serverDone <- runWithHandler(ctx, address, handler, logger, func() { close(stoppedAccepting) }, nil)
 	}()
 	go func() {
-		client := http.Client{Timeout: 5 * time.Second}
+		client := http.Client{
+			Timeout:   5 * time.Second,
+			Transport: &http.Transport{Proxy: nil},
+		}
 		response, err := client.Get("http://" + address + "/active")
 		if err == nil {
 			response.Body.Close()
@@ -105,6 +108,8 @@ func TestRunWithHandlerDrainsRequestsBeforeReturning(t *testing.T) {
 
 	select {
 	case <-started:
+	case err := <-serverDone:
+		t.Fatalf("server stopped before the in-flight request started: %v", err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("server did not start the in-flight request")
 	}
