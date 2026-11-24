@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,6 +26,13 @@ type authenticationStub struct {
 	loginError     error
 	loginInput     loginRequest
 	loginCalls     int
+	authResult     service.AuthenticatedSession
+	authError      error
+	authToken      string
+	authCalls      int
+	logoutError    error
+	logoutSession  domain.ID
+	logoutCalls    int
 }
 
 func (stub *authenticationStub) Register(_ context.Context, name, email, password string) (service.AuthenticationResult, error) {
@@ -37,6 +45,18 @@ func (stub *authenticationStub) Login(_ context.Context, email, password string)
 	stub.loginCalls++
 	stub.loginInput = loginRequest{Email: email, Password: password}
 	return stub.loginResult, stub.loginError
+}
+
+func (stub *authenticationStub) Authenticate(_ context.Context, token string) (service.AuthenticatedSession, error) {
+	stub.authCalls++
+	stub.authToken = token
+	return stub.authResult, stub.authError
+}
+
+func (stub *authenticationStub) Logout(_ context.Context, sessionID domain.ID) error {
+	stub.logoutCalls++
+	stub.logoutSession = sessionID
+	return stub.logoutError
 }
 
 func TestRegisterHandlerCreatesSessionCookieAndUserDTO(t *testing.T) {
@@ -125,6 +145,105 @@ func TestRegisterHandlerRejectsInvalidJSONBeforeCallingService(t *testing.T) {
 	}
 	if serviceStub.registerCalls != 0 || len(response.Result().Cookies()) != 0 {
 		t.Fatal("invalid request reached the service or set a session cookie")
+	}
+}
+
+func TestMeHandlerReturnsAuthenticatedUserDTO(t *testing.T) {
+	serviceStub := &authenticationStub{authResult: service.AuthenticatedSession{
+		User:    domain.User{ID: "user-3", Name: "Lin", Email: "lin@example.com", GoogleSub: "google-secret"},
+		Session: domain.Session{ID: "session-3"}, HasPassword: true,
+	}}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, true)
+	request := httptest.NewRequest(http.MethodGet, "/api/me", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.Me(response, request)
+
+	if response.Code != http.StatusOK || serviceStub.authCalls != 1 || serviceStub.authToken != "session-token" {
+		t.Fatalf("me status/calls/token = %d/%d/%q", response.Code, serviceStub.authCalls, serviceStub.authToken)
+	}
+	var user UserDTO
+	if err := json.Unmarshal(response.Body.Bytes(), &user); err != nil {
+		t.Fatal(err)
+	}
+	if user.ID != "user-3" || !user.HasPassword || !user.GoogleLinked || !user.Capabilities.Google || !user.Capabilities.Telegram {
+		t.Fatalf("unexpected current-user DTO: %+v", user)
+	}
+	if strings.Contains(response.Body.String(), "google-secret") || strings.Contains(response.Body.String(), "session-token") {
+		t.Fatalf("current-user response exposed credentials: %s", response.Body.String())
+	}
+}
+
+func TestMeHandlerRequiresSessionCookie(t *testing.T) {
+	serviceStub := &authenticationStub{}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, false)
+	response := httptest.NewRecorder()
+	handler.Me(response, httptest.NewRequest(http.MethodGet, "/api/me", nil))
+	if response.Code != http.StatusUnauthorized || serviceStub.authCalls != 0 {
+		t.Fatalf("me status/service calls = %d/%d, want 401/0", response.Code, serviceStub.authCalls)
+	}
+}
+
+func TestLogoutHandlerClearsAbsentOrInvalidSession(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		token     string
+		authError error
+		wantAuth  int
+	}{
+		{name: "absent session"},
+		{name: "invalid session", token: "expired-token", authError: apperrors.ErrUnauthenticated, wantAuth: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			serviceStub := &authenticationStub{authError: test.authError}
+			handler := newAuthenticationHandlerForTest(t, serviceStub, true)
+			request := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+			if test.token != "" {
+				request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: test.token})
+			}
+			response := httptest.NewRecorder()
+			handler.Logout(response, request)
+
+			if response.Code != http.StatusNoContent || serviceStub.authCalls != test.wantAuth || serviceStub.logoutCalls != 0 {
+				t.Fatalf("logout status/auth/logout calls = %d/%d/%d", response.Code, serviceStub.authCalls, serviceStub.logoutCalls)
+			}
+			cookie := sessionCookieFromResponse(t, response)
+			if cookie.MaxAge >= 0 || !cookie.Secure {
+				t.Fatalf("session cookie was not securely cleared: %#v", cookie)
+			}
+		})
+	}
+}
+
+func TestLogoutHandlerDeletesSessionAndClearsCookie(t *testing.T) {
+	serviceStub := &authenticationStub{authResult: service.AuthenticatedSession{Session: domain.Session{ID: "session-4"}}}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, false)
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.Logout(response, request)
+
+	if response.Code != http.StatusNoContent || serviceStub.authCalls != 1 || serviceStub.logoutCalls != 1 || serviceStub.logoutSession != "session-4" {
+		t.Fatalf("logout status/auth/logout/session = %d/%d/%d/%q", response.Code, serviceStub.authCalls, serviceStub.logoutCalls, serviceStub.logoutSession)
+	}
+	cookie := sessionCookieFromResponse(t, response)
+	if cookie.MaxAge >= 0 || cookie.Secure {
+		t.Fatalf("session cookie was not cleared with development settings: %#v", cookie)
+	}
+}
+
+func TestLogoutHandlerPreservesCookieWhenSessionDeletionFails(t *testing.T) {
+	serviceStub := &authenticationStub{
+		authResult:  service.AuthenticatedSession{Session: domain.Session{ID: "session-5"}},
+		logoutError: errors.New("session store unavailable"),
+	}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, false)
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.Logout(response, request)
+	if response.Code != http.StatusInternalServerError || len(response.Result().Cookies()) != 0 {
+		t.Fatalf("logout failure returned %d with cookies %v", response.Code, response.Result().Cookies())
 	}
 }
 
