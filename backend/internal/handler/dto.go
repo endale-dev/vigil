@@ -18,6 +18,11 @@ type UserDTO struct {
 	Capabilities CapabilitiesDTO `json:"capabilities"`
 }
 
+type ErrorDTO struct {
+	Error string `json:"error"`
+	Field string `json:"field,omitempty"`
+}
+
 type NotifyDTO struct {
 	EmailAlerts    bool   `json:"emailAlerts"`
 	TelegramChatID string `json:"telegramChatId"`
