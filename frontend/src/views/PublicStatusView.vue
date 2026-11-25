@@ -6,17 +6,16 @@ import { getPublicStatus } from '../api/status'
 import type { PublicCheckDTO, UptimeSummaryDTO } from '../api/types'
 import GuestShell from '../components/GuestShell.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import WorkspaceShell from '../components/WorkspaceShell.vue'
 import { usePolling } from '../composables/usePolling'
 import { useSession } from '../composables/useSession'
 
 const route = useRoute()
 const session = useSession()
-const headerLink = computed(() => {
-  if (!session.isReady.value) return null
-  return session.user.value
-    ? { label: 'Back to overview', to: { name: 'dashboard' } }
-    : { label: 'Sign in', to: { name: 'login' } }
-})
+const layoutComponent = computed(() => session.isReady.value && session.user.value ? WorkspaceShell : GuestShell)
+const layoutProps = computed(() => layoutComponent.value === GuestShell
+  ? { headerLinkLabel: 'Sign in', headerLinkTo: { name: 'login' } }
+  : {})
 const slug = computed(() => typeof route.params.slug === 'string' ? route.params.slug : '')
 const { data, error, isLoading, refresh } = usePolling(() => getPublicStatus(slug.value), 30_000)
 const loadError = computed(() => {
@@ -43,10 +42,7 @@ function checkLabel(check: PublicCheckDTO): string {
 </script>
 
 <template>
-  <GuestShell
-    :header-link-label="headerLink?.label"
-    :header-link-to="headerLink?.to"
-  >
+  <component :is="layoutComponent" v-bind="layoutProps">
     <div v-if="!data && isLoading" class="mt-8 text-sm text-vigil-muted" role="status">Loading status page…</div>
 
     <section v-else-if="!data && loadError" class="mt-8 rounded-lg border border-vigil-rule bg-vigil-surface p-6">
@@ -114,5 +110,5 @@ function checkLabel(check: PublicCheckDTO): string {
       <p v-else class="rounded-lg border border-vigil-rule bg-vigil-surface p-6 text-sm text-vigil-muted">No public monitors are available yet.</p>
       <p v-if="error" class="text-sm text-vigil-warn" role="status">Refresh failed. Showing the last loaded status.</p>
     </div>
-  </GuestShell>
+  </component>
 </template>

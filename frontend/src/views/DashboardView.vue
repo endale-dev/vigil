@@ -47,7 +47,7 @@ const uptime24Hours = computed(() => {
 })
 const overallStatus = computed(() => {
   if (monitors.value.length === 0) {
-    return { title: 'No monitors yet', detail: 'Add a service to begin watching its availability.', tone: 'neutral' }
+    return { title: 'No monitors yet', detail: '', tone: 'neutral' }
   }
   if (activeMonitors.value.length === 0) {
     return { title: 'Monitoring is paused', detail: 'Resume a monitor to start receiving fresh checks.', tone: 'neutral' }
@@ -184,7 +184,7 @@ function lastCheckedLabel(value: string | null): string {
           />
           <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
             <p class="font-semibold" :class="overallStatus.tone === 'danger' ? 'text-vigil-down' : 'text-vigil-ink'">{{ overallStatus.title }}</p>
-            <p class="text-sm text-vigil-muted">{{ overallStatus.detail }}</p>
+            <p v-if="overallStatus.detail" class="text-sm text-vigil-muted">{{ overallStatus.detail }}</p>
           </div>
         </div>
         <p class="px-3 text-sm text-vigil-muted sm:px-0">
@@ -214,7 +214,7 @@ function lastCheckedLabel(value: string | null): string {
       <section class="pt-8" aria-labelledby="monitor-list-title">
         <div class="flex items-baseline justify-between gap-4 pb-3">
           <h2 id="monitor-list-title" class="text-lg font-semibold tracking-tight">Monitors</h2>
-          <p class="text-xs text-vigil-muted">Refreshes every 15 seconds</p>
+          <p v-if="monitors.length" class="text-xs text-vigil-muted">Refreshes every 15 seconds</p>
         </div>
 
         <p v-if="actionError" class="mb-4 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
@@ -230,13 +230,8 @@ function lastCheckedLabel(value: string | null): string {
             Try again
           </button>
         </div>
-        <div v-else-if="monitors.length === 0" class="border-y border-vigil-rule py-12">
-          <h3 class="text-base font-semibold">Start with a monitor</h3>
-          <p class="mt-1 text-sm text-vigil-muted">Add a website, service, or certificate to begin checking its availability.</p>
-          <button class="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-vigil-brand px-3.5 text-sm font-semibold text-white hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2" type="button" @click="openCreateDialog">
-            <Plus :size="16" aria-hidden="true" />
-            Add your first monitor
-          </button>
+        <div v-else-if="monitors.length === 0" class="border-y border-vigil-rule py-6 text-sm text-vigil-muted">
+          Your monitor list will appear here once you add a service.
         </div>
         <div v-else>
           <div class="hidden grid-cols-[minmax(0,1.7fr)_minmax(7.5rem,.7fr)_minmax(5.5rem,.6fr)_minmax(8rem,.8fr)_auto] gap-4 border-y border-vigil-rule py-2.5 text-xs font-medium text-vigil-muted xl:grid">
