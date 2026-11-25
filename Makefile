@@ -3,9 +3,12 @@ NPM ?= npm
 DOCKER ?= docker
 STATICCHECK_VERSION ?= 2026.2.2
 DEADCODE_VERSION ?= v0.50.0
+CGO_ENABLED ?= 1
+export CGO_ENABLED
 GO_SOURCES := $(wildcard backend/*.go backend/internal/*/*.go backend/internal/*/*/*.go backend/internal/*/*/*/*.go)
 
 .PHONY: backend-module test build run lint deadcode check web docker
+.NOTPARALLEL: check
 
 backend-module:
 ifeq ($(wildcard backend/go.mod),)
@@ -19,7 +22,7 @@ test: backend-module
 	$(if $(GO_SOURCES),,$(error No Go source files exist yet; add a Go package before running tests))
 	$(GO) -C backend test -race ./...
 
-build: backend-module
+build: backend-module web
 	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; the application entry point has not been added yet))
 ifeq ($(OS),Windows_NT)
 	@if not exist backend\bin mkdir backend\bin
@@ -42,7 +45,7 @@ deadcode: backend-module
 	$(if $(wildcard backend/main.go),,$(error backend/main.go is missing; dead-code analysis needs an executable package))
 	$(GO) -C backend run golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION) -test ./...
 
-check: test build lint deadcode web
+check: test web build lint deadcode
 
 web:
 	$(if $(wildcard frontend/package.json),,$(error frontend/package.json is missing; the frontend has not been initialized yet))

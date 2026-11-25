@@ -196,9 +196,7 @@ func waitForServer(t *testing.T, client *http.Client, url string) {
 				return
 			}
 		}
-		select {
-		case <-time.After(10 * time.Millisecond):
-		}
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("HTTP server did not become ready")
 }
