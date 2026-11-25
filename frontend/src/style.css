@@ -1,13 +1,38 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url("@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+
 @theme {
-  --color-vigil-canvas: #f4f6fa;
-  --color-vigil-surface: #ffffff;
-  --color-vigil-ink: #202a3a;
-  --color-vigil-muted: #687386;
-  --color-vigil-line: #e1e6ef;
-  --color-vigil-sidebar: #202b40;
-  --color-vigil-brand: #3158d4;
-  --color-vigil-brand-hover: #2849b8;
-  --color-vigil-brand-soft: #edf1ff;
+  --color-vigil-paper: #f2f0e8;
+  --color-vigil-rail: #eeece4;
+  --color-vigil-surface: #fbfaf6;
+  --color-vigil-ink: #1e2c2a;
+  --color-vigil-muted: #65716b;
+  --color-vigil-rule: #d8ddd5;
+  --color-vigil-brand: #315b6e;
+  --color-vigil-brand-hover: #254858;
+  --color-vigil-brand-soft: #e5edf0;
+  --color-vigil-up: #287a56;
+  --color-vigil-up-soft: #eaf2ec;
+  --color-vigil-warn: #8d5a13;
+  --color-vigil-warn-soft: #f6efe2;
+  --color-vigil-down: #b64038;
+  --color-vigil-down-soft: #f8eae6;
+  --color-vigil-unknown: #626d73;
+  --font-vigil-sans: "IBM Plex Sans", sans-serif;
+  --font-vigil-mono: "IBM Plex Mono", monospace;
 }

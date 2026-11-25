@@ -15,11 +15,9 @@ const props = withDefaults(defineProps<{
   fieldErrors?: Record<string, string | undefined>
   disabled?: boolean
   submitLabel?: string
-  tone?: 'dark' | 'light'
 }>(), {
   disabled: false,
   submitLabel: 'Save monitor',
-  tone: 'dark',
 })
 
 const emit = defineEmits<{
@@ -93,7 +91,7 @@ function submit(): void {
   <form class="grid gap-5" @submit.prevent="submit">
     <FormField
       id="monitor-name"
-      :tone="tone"
+
       :model-value="form.name"
       @update:model-value="form.name = $event"
       label="Monitor name"
@@ -109,8 +107,7 @@ function submit(): void {
       <select
         id="monitor-type"
         :value="form.type"
-      class="min-h-10 rounded-lg border px-3 py-2 outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-      :class="tone === 'light' ? 'border-vigil-line bg-white text-vigil-ink focus-visible:ring-vigil-brand' : 'border-slate-600 bg-slate-900 text-slate-100 focus-visible:ring-emerald-400'"
+        class="min-h-10 rounded-md border border-vigil-rule bg-vigil-surface px-3 py-2 text-vigil-ink outline-none focus-visible:ring-2 focus-visible:ring-vigil-brand disabled:cursor-not-allowed disabled:opacity-60"
         :disabled="disabled"
         @change="updateType"
       >
@@ -118,12 +115,12 @@ function submit(): void {
         <option value="tcp">TCP</option>
         <option value="tls">TLS certificate</option>
       </select>
-      <p v-if="fieldErrors?.type" class="text-sm" :class="tone === 'light' ? 'text-red-700' : 'text-red-300'">{{ fieldErrors.type }}</p>
+      <p v-if="fieldErrors?.type" class="text-sm text-vigil-down">{{ fieldErrors.type }}</p>
     </div>
 
     <FormField
       id="monitor-target"
-      :tone="tone"
+
       :model-value="form.target"
       @update:model-value="form.target = $event"
       :label="form.type === 'http' ? 'URL' : 'Host and port'"
@@ -137,7 +134,7 @@ function submit(): void {
     <div class="grid gap-4 sm:grid-cols-2">
       <FormField
         id="monitor-interval"
-        :tone="tone"
+
         :model-value="form.intervalSeconds"
         @update:model-value="form.intervalSeconds = $event"
         label="Check interval (seconds)"
@@ -150,7 +147,7 @@ function submit(): void {
       />
       <FormField
         id="monitor-timeout"
-        :tone="tone"
+
         :model-value="form.timeoutSeconds"
         @update:model-value="form.timeoutSeconds = $event"
         label="Timeout (seconds)"
@@ -166,7 +163,7 @@ function submit(): void {
     <FormField
       v-if="form.type === 'http'"
       id="monitor-expected-status"
-      :tone="tone"
+
       :model-value="form.expectedStatus"
       @update:model-value="form.expectedStatus = $event"
       label="Expected HTTP status (0 accepts any success status)"
@@ -181,7 +178,7 @@ function submit(): void {
     <FormField
       v-if="form.type === 'tls'"
       id="monitor-tls-warn-days"
-      :tone="tone"
+
       :model-value="form.tlsWarnDays"
       @update:model-value="form.tlsWarnDays = $event"
       label="Warn when certificate expires within (days)"
@@ -194,21 +191,21 @@ function submit(): void {
     />
 
     <label class="flex items-center gap-2 text-sm">
-      <input v-model="form.public" type="checkbox" class="size-4 focus-visible:outline-2 focus-visible:outline-offset-2" :class="tone === 'light' ? 'accent-vigil-brand' : 'accent-emerald-500'" :disabled="disabled" />
+      <input v-model="form.public" type="checkbox" class="size-4 accent-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2" :disabled="disabled" />
       Show this monitor on my public status page
     </label>
 
-    <p v-if="validationError" class="text-sm" :class="tone === 'light' ? 'text-red-700' : 'text-red-300'" role="alert">
+    <p v-if="validationError" class="text-sm text-vigil-down" role="alert">
       {{ validationError }}
     </p>
 
-    <div v-if="fieldErrors?.public" class="text-sm" :class="tone === 'light' ? 'text-red-700' : 'text-red-300'" role="alert">
+    <div v-if="fieldErrors?.public" class="text-sm text-vigil-down" role="alert">
       {{ fieldErrors.public }}
     </div>
 
     <button
-      class="min-h-10 justify-self-start rounded-lg px-4 py-2 font-semibold text-white transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-      :class="tone === 'light' ? 'bg-vigil-brand hover:bg-vigil-brand-hover focus-visible:outline-vigil-brand' : 'bg-emerald-700 hover:bg-emerald-600'"
+      class="min-h-10 justify-self-start rounded-md bg-vigil-brand px-4 py-2 font-semibold text-white transition-colors hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+
       type="submit"
       :disabled="disabled || timeoutExceedsInterval"
     >

@@ -8,12 +8,10 @@ const props = withDefaults(defineProps<{
   confirmLabel?: string
   cancelLabel?: string
   busy?: boolean
-  tone?: 'dark' | 'light'
 }>(), {
   confirmLabel: 'Confirm',
   cancelLabel: 'Cancel',
   busy: false,
-  tone: 'dark',
 })
 
 const emit = defineEmits<{
@@ -43,19 +41,17 @@ function cancel(): void {
 <template>
   <dialog
     ref="dialog"
-    class="w-[min(28rem,calc(100%-2rem))] rounded-2xl border p-6 shadow-2xl backdrop:bg-slate-950/35"
-    :class="tone === 'light' ? 'border-vigil-line bg-white text-vigil-ink' : 'border-slate-700 bg-slate-900 text-slate-100'"
+    class="w-[min(28rem,calc(100%-2rem))] rounded-lg border border-vigil-rule bg-vigil-surface p-6 text-vigil-ink shadow-xl backdrop:bg-vigil-ink/35"
     :aria-labelledby="'confirm-dialog-title'"
     :aria-describedby="'confirm-dialog-message'"
     @cancel.prevent="cancel"
   >
     <div class="grid gap-4">
       <h2 id="confirm-dialog-title" class="text-lg font-semibold">{{ title }}</h2>
-      <p id="confirm-dialog-message" class="text-sm" :class="tone === 'light' ? 'text-vigil-muted' : 'text-slate-300'">{{ message }}</p>
+      <p id="confirm-dialog-message" class="text-sm text-vigil-muted">{{ message }}</p>
       <div class="flex justify-end gap-3">
         <button
-          class="min-h-10 rounded-lg border px-4 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
-          :class="tone === 'light' ? 'border-vigil-line hover:bg-vigil-canvas focus-visible:outline-vigil-brand' : 'border-slate-600'"
+          class="min-h-10 rounded-md border border-vigil-rule px-4 py-2 hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand disabled:opacity-60"
           type="button"
           :disabled="busy"
           @click="cancel"
@@ -63,8 +59,7 @@ function cancel(): void {
           {{ cancelLabel }}
         </button>
         <button
-          class="min-h-10 rounded-lg px-4 py-2 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-          :class="tone === 'light' ? 'bg-red-700 hover:bg-red-800 focus-visible:outline-red-700' : 'bg-red-700'"
+          class="min-h-10 rounded-md bg-vigil-down px-4 py-2 font-semibold text-white hover:bg-vigil-down/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-down disabled:cursor-not-allowed disabled:opacity-60"
           type="button"
           :disabled="busy"
           @click="emit('confirm')"

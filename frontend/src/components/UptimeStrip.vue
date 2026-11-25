@@ -20,15 +20,13 @@ function checkLabel(check: CheckDTO): string {
     <ol v-if="chronologicalChecks.length" class="flex flex-wrap gap-1" aria-label="Recent monitor checks">
       <li v-for="check in chronologicalChecks" :key="check.id" :title="checkLabel(check)">
         <span
-          class="flex size-7 items-center justify-center rounded-sm text-xs font-semibold"
-          :class="check.up ? 'bg-emerald-950 text-emerald-200' : 'bg-red-950 text-red-200'"
+          class="block h-6 w-2.5 rounded-sm"
+          :class="check.up ? 'bg-vigil-up' : 'bg-vigil-down'"
           :aria-label="checkLabel(check)"
           role="img"
-        >
-          <span aria-hidden="true">{{ check.up ? '✓' : '×' }}</span>
-        </span>
+        />
       </li>
     </ol>
-    <p v-else class="text-sm text-slate-400">No checks yet.</p>
+    <p v-else class="text-sm text-vigil-muted">No checks yet.</p>
   </div>
 </template>

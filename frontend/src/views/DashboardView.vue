@@ -2,18 +2,10 @@
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
-  Activity,
-  CircleCheck,
-  CircleDashed,
-  CircleHelp,
-  Globe,
-  Network,
   Pause,
   Play,
   Plus,
-  ShieldCheck,
   Trash2,
-  TriangleAlert,
 } from '@lucide/vue'
 import { ApiError } from '../api/client'
 import {
@@ -55,18 +47,18 @@ const uptime24Hours = computed(() => {
 })
 const overallStatus = computed(() => {
   if (monitors.value.length === 0) {
-    return { title: 'No monitors yet', detail: 'Add a service to begin watching its availability.', icon: CircleDashed, tone: 'neutral' }
+    return { title: 'No monitors yet', detail: 'Add a service to begin watching its availability.', tone: 'neutral' }
   }
   if (activeMonitors.value.length === 0) {
-    return { title: 'Monitoring is paused', detail: 'Resume a monitor to start receiving fresh checks.', icon: CircleHelp, tone: 'neutral' }
+    return { title: 'Monitoring is paused', detail: 'Resume a monitor to start receiving fresh checks.', tone: 'neutral' }
   }
   if (downCount.value > 0) {
-    return { title: 'Some services need attention', detail: `${downCount.value} active ${downCount.value === 1 ? 'monitor is' : 'monitors are'} currently down.`, icon: TriangleAlert, tone: 'danger' }
+    return { title: 'Some services need attention', detail: `${downCount.value} active ${downCount.value === 1 ? 'monitor is' : 'monitors are'} currently down.`, tone: 'danger' }
   }
   if (unknownCount.value > 0) {
-    return { title: 'Waiting for the first checks', detail: 'Newly added services will show here as results arrive.', icon: Activity, tone: 'neutral' }
+    return { title: 'Waiting for the first checks', detail: 'Newly added services will show here as results arrive.', tone: 'neutral' }
   }
-  return { title: 'All systems operational', detail: 'Every active monitor is reporting a healthy response.', icon: CircleCheck, tone: 'success' }
+  return { title: 'All systems operational', detail: 'Every active monitor is reporting a healthy response.', tone: 'success' }
 })
 const createDialog = ref<HTMLDialogElement | null>(null)
 const creating = ref(false)
@@ -154,226 +146,175 @@ function lastCheckedLabel(value: string | null): string {
     return 'No checks yet'
   }
   const checkedAt = new Date(value)
-  return Number.isNaN(checkedAt.getTime()) ? 'Last check time unavailable' : checkedAt.toLocaleString()
+  return Number.isNaN(checkedAt.getTime())
+    ? 'Time unavailable'
+    : checkedAt.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 </script>
 
 <template>
-  <WorkspaceShell title="Overview" description="Monitor service health across your stack">
-    <template #header-action>
-      <button
-        class="hidden min-h-10 items-center gap-2 rounded-lg bg-vigil-brand px-4 text-sm font-semibold text-white shadow-sm shadow-blue-900/10 transition-colors hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand sm:inline-flex"
-        type="button"
-        @click="openCreateDialog"
-      >
-        <Plus :size="17" :stroke-width="2.2" aria-hidden="true" />
-        Add monitor
-      </button>
-    </template>
-
-    <section class="grid gap-7" aria-label="Monitor overview" :aria-busy="isLoading">
-      <header class="flex flex-wrap items-end justify-between gap-4">
+  <WorkspaceShell>
+    <section class="grid gap-0" aria-label="Monitor overview" :aria-busy="isLoading">
+      <header class="flex flex-wrap items-end justify-between gap-4 pb-7">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.15em] text-vigil-brand">Monitoring</p>
-          <h1 class="mt-2 text-[1.8rem] font-semibold tracking-[-0.035em] text-vigil-ink sm:text-3xl">Your services at a glance</h1>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-vigil-muted">A clear view of current health, recent checks, and uptime across your monitors.</p>
+          <p class="text-sm font-medium text-vigil-brand">Your workspace</p>
+          <h1 class="mt-2 text-[1.9rem] font-semibold leading-tight tracking-[-0.04em] text-vigil-ink sm:text-3xl">Overview</h1>
         </div>
         <button
-          class="inline-flex min-h-10 items-center gap-2 rounded-lg bg-vigil-brand px-4 text-sm font-semibold text-white shadow-sm shadow-blue-900/10 transition-colors hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand sm:hidden"
+          class="inline-flex min-h-11 items-center gap-2 rounded-md bg-vigil-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
           type="button"
           @click="openCreateDialog"
         >
-          <Plus :size="17" :stroke-width="2.2" aria-hidden="true" />
+          <Plus :size="17" :stroke-width="2" aria-hidden="true" />
           Add monitor
         </button>
       </header>
 
       <div
-        class="flex flex-col gap-4 rounded-2xl border p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5"
-        :class="overallStatus.tone === 'success'
-          ? 'border-emerald-200 bg-emerald-50/80'
-          : overallStatus.tone === 'danger'
-            ? 'border-red-200 bg-red-50/80'
-            : 'border-vigil-line bg-white'"
+        class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-y py-4"
+        :class="overallStatus.tone === 'danger' ? 'border-vigil-down/35 bg-vigil-down-soft/45' : 'border-vigil-rule'"
         role="status"
       >
-        <div class="flex items-start gap-4">
+        <div class="flex min-w-0 items-center gap-3 px-3 sm:px-0">
           <span
-            class="grid size-11 shrink-0 place-items-center rounded-xl"
-            :class="overallStatus.tone === 'success' ? 'bg-emerald-100 text-emerald-800' : overallStatus.tone === 'danger' ? 'bg-red-100 text-red-800' : 'bg-vigil-brand-soft text-vigil-brand'"
-          >
-            <component :is="overallStatus.icon" :size="21" :stroke-width="1.9" aria-hidden="true" />
-          </span>
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-[0.12em] text-vigil-muted">System status</p>
-            <h2 class="mt-1 text-lg font-semibold tracking-tight text-vigil-ink">{{ overallStatus.title }}</h2>
-            <p class="mt-1 text-sm text-vigil-muted">{{ overallStatus.detail }}</p>
+            class="size-2.5 shrink-0 rounded-full"
+            :class="overallStatus.tone === 'success' ? 'bg-vigil-up' : overallStatus.tone === 'danger' ? 'bg-vigil-down' : 'bg-vigil-unknown'"
+            aria-hidden="true"
+          />
+          <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <p class="font-semibold" :class="overallStatus.tone === 'danger' ? 'text-vigil-down' : 'text-vigil-ink'">{{ overallStatus.title }}</p>
+            <p class="text-sm text-vigil-muted">{{ overallStatus.detail }}</p>
           </div>
         </div>
-        <p class="shrink-0 text-sm font-medium text-vigil-muted">
-          {{ activeMonitors.length }} active <span class="mx-1 text-slate-300">·</span> {{ pausedCount }} paused
+        <p class="px-3 text-sm text-vigil-muted sm:px-0">
+          {{ activeMonitors.length }} active <span class="mx-1 text-vigil-rule">·</span> {{ pausedCount }} paused
         </p>
       </div>
 
-      <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Key metrics">
-        <article class="rounded-2xl border border-vigil-line bg-vigil-surface p-5 shadow-sm shadow-slate-900/[0.025]">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-medium text-vigil-muted">Active monitors</p>
-            <span class="grid size-9 place-items-center rounded-lg bg-vigil-brand-soft text-vigil-brand">
-              <Globe :size="17" :stroke-width="1.8" aria-hidden="true" />
-            </span>
-          </div>
-          <p class="mt-5 text-3xl font-semibold tracking-[-0.04em] tabular-nums">{{ activeMonitors.length }}</p>
-          <p class="mt-1 text-xs text-vigil-muted">{{ monitors.length }} total configured</p>
-        </article>
-
-        <article class="rounded-2xl border border-vigil-line bg-vigil-surface p-5 shadow-sm shadow-slate-900/[0.025]">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-medium text-vigil-muted">Services up</p>
-            <span class="grid size-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
-              <CircleCheck :size="18" :stroke-width="1.9" aria-hidden="true" />
-            </span>
-          </div>
-          <p class="mt-5 text-3xl font-semibold tracking-[-0.04em] tabular-nums">{{ upCount }}<span class="ml-1 text-base font-medium text-vigil-muted">/ {{ activeMonitors.length }}</span></p>
-          <p class="mt-1 text-xs text-vigil-muted">{{ downCount }} down · {{ unknownCount }} awaiting checks</p>
-        </article>
-
-        <article class="rounded-2xl border border-vigil-line bg-vigil-surface p-5 shadow-sm shadow-slate-900/[0.025] sm:col-span-2 xl:col-span-1">
-          <div class="flex items-center justify-between gap-3">
-            <p class="text-sm font-medium text-vigil-muted">24-hour success rate</p>
-            <span class="grid size-9 place-items-center rounded-lg bg-[#f0f3f8] text-vigil-sidebar">
-              <Activity :size="18" :stroke-width="1.8" aria-hidden="true" />
-            </span>
-          </div>
-          <p class="mt-5 text-3xl font-semibold tracking-[-0.04em] tabular-nums">{{ uptime24Hours === null ? '—' : `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
-          <p class="mt-1 text-xs text-vigil-muted">Weighted across available checks</p>
-        </article>
+      <section class="grid grid-cols-2 border-b border-vigil-rule sm:grid-cols-4" aria-label="Monitor summary">
+        <div class="border-b border-vigil-rule py-4 pr-4 sm:border-b-0 sm:pr-6">
+          <p class="text-sm text-vigil-muted">Active</p>
+          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ activeMonitors.length }}</p>
+        </div>
+        <div class="border-b border-l border-vigil-rule py-4 pl-4 sm:border-b-0 sm:px-6">
+          <p class="text-sm text-vigil-muted">Up</p>
+          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-up">{{ upCount }}</p>
+        </div>
+        <div class="py-4 pr-4 sm:border-l sm:border-vigil-rule sm:px-6">
+          <p class="text-sm text-vigil-muted">Down</p>
+          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums" :class="downCount ? 'text-vigil-down' : 'text-vigil-ink'">{{ downCount }}</p>
+        </div>
+        <div class="border-l border-vigil-rule py-4 pl-4 sm:pl-6">
+          <p class="text-sm text-vigil-muted">24h success</p>
+          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ uptime24Hours === null ? '—' : `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
+        </div>
       </section>
 
-      <section class="overflow-hidden rounded-2xl border border-vigil-line bg-white shadow-sm shadow-slate-900/[0.025]" aria-labelledby="monitor-list-title">
-        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-vigil-line px-5 py-4 sm:px-6">
-          <div>
-            <h2 id="monitor-list-title" class="font-semibold tracking-tight">Monitors</h2>
-            <p class="mt-1 text-xs text-vigil-muted">Updates automatically every 15 seconds</p>
-          </div>
-          <span class="rounded-full bg-vigil-canvas px-2.5 py-1 text-xs font-semibold tabular-nums text-vigil-muted">{{ monitors.length }}</span>
+      <section class="pt-8" aria-labelledby="monitor-list-title">
+        <div class="flex items-baseline justify-between gap-4 pb-3">
+          <h2 id="monitor-list-title" class="text-lg font-semibold tracking-tight">Monitors</h2>
+          <p class="text-xs text-vigil-muted">Refreshes every 15 seconds</p>
         </div>
 
-        <p v-if="actionError" class="m-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:mx-6" role="alert">
+        <p v-if="actionError" class="mb-4 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
           {{ actionError }}
         </p>
 
-        <div v-if="isLoading && !monitorData" class="px-6 py-12 text-center text-sm text-vigil-muted" role="status">
+        <div v-if="isLoading && !monitorData" class="border-y border-vigil-rule py-10 text-sm text-vigil-muted" role="status">
           Loading monitors…
         </div>
-        <div v-else-if="monitorError && !monitorData" class="px-6 py-10 text-center">
-          <p class="text-sm text-red-700" role="alert">{{ loadError }}</p>
-          <button class="mt-3 text-sm font-semibold text-vigil-brand hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" type="button" @click="refresh">
+        <div v-else-if="monitorError && !monitorData" class="border-y border-vigil-rule py-8">
+          <p class="text-sm text-vigil-down" role="alert">{{ loadError }}</p>
+          <button class="mt-3 text-sm font-semibold text-vigil-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" type="button" @click="refresh">
             Try again
           </button>
         </div>
-        <div v-else-if="monitors.length === 0" class="px-6 py-14 text-center sm:py-16">
-          <span class="mx-auto grid size-12 place-items-center rounded-2xl bg-vigil-brand-soft text-vigil-brand">
-            <Activity :size="22" :stroke-width="1.8" aria-hidden="true" />
-          </span>
-          <h3 class="mt-4 text-base font-semibold">Start with your first monitor</h3>
-          <p class="mx-auto mt-2 max-w-sm text-sm leading-6 text-vigil-muted">Add a website, service, or certificate and Vigil will keep an eye on it.</p>
-          <button class="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg bg-vigil-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" type="button" @click="openCreateDialog">
-            <Plus :size="17" aria-hidden="true" />
+        <div v-else-if="monitors.length === 0" class="border-y border-vigil-rule py-12">
+          <h3 class="text-base font-semibold">Start with a monitor</h3>
+          <p class="mt-1 text-sm text-vigil-muted">Add a website, service, or certificate to begin checking its availability.</p>
+          <button class="mt-4 inline-flex min-h-10 items-center gap-2 rounded-md bg-vigil-brand px-3.5 text-sm font-semibold text-white hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2" type="button" @click="openCreateDialog">
+            <Plus :size="16" aria-hidden="true" />
             Add your first monitor
           </button>
         </div>
-        <ul v-else class="divide-y divide-vigil-line" aria-label="Your monitors">
-          <li v-for="monitor in monitors" :key="monitor.id" class="grid items-center gap-x-5 gap-y-4 px-5 py-5 transition-colors hover:bg-slate-50/70 sm:px-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(8rem,0.8fr)_minmax(7rem,0.7fr)_minmax(8rem,0.9fr)_auto]">
-            <div class="flex min-w-0 items-center gap-3">
-              <span class="grid size-10 shrink-0 place-items-center rounded-xl border border-vigil-line bg-vigil-canvas text-vigil-muted">
-                <component :is="monitor.type === 'http' ? Globe : monitor.type === 'tcp' ? Network : ShieldCheck" :size="18" :stroke-width="1.8" aria-hidden="true" />
-              </span>
+        <div v-else>
+          <div class="hidden grid-cols-[minmax(0,1.7fr)_minmax(7.5rem,.7fr)_minmax(5.5rem,.6fr)_minmax(8rem,.8fr)_auto] gap-4 border-y border-vigil-rule py-2.5 text-xs font-medium text-vigil-muted xl:grid">
+            <span>Service</span>
+            <span>Status</span>
+            <span>24h uptime</span>
+            <span>Last check</span>
+            <span class="sr-only">Actions</span>
+          </div>
+          <ul aria-label="Your monitors">
+            <li v-for="monitor in monitors" :key="monitor.id" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 border-b border-vigil-rule py-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(7.5rem,.7fr)_minmax(5.5rem,.6fr)_minmax(8rem,.8fr)_auto] xl:gap-4">
               <div class="min-w-0">
-                <RouterLink class="block truncate text-sm font-semibold text-vigil-ink hover:text-vigil-brand focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :to="{ name: 'monitor-detail', params: { id: monitor.id } }">
+                <RouterLink class="block truncate text-sm font-semibold text-vigil-ink underline-offset-4 hover:text-vigil-brand hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :to="{ name: 'monitor-detail', params: { id: monitor.id } }">
                   {{ monitor.name }}
                 </RouterLink>
-                <p class="mt-1 truncate text-xs text-vigil-muted" :title="monitor.target">{{ monitor.target }}</p>
+                <p class="mt-1 truncate text-xs text-vigil-muted" :title="monitor.target">{{ monitor.target }} <span class="mx-1 text-vigil-rule">·</span> {{ monitor.type === 'tls' ? 'TLS' : monitor.type.toUpperCase() }}</p>
               </div>
-            </div>
 
-            <div class="flex items-center gap-2 lg:block">
-              <p class="mb-1 hidden text-[11px] font-medium uppercase tracking-wide text-vigil-muted lg:block">Status</p>
-              <StatusBadge :status="monitor.status" tone="light" />
-              <span v-if="!monitor.enabled" class="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">Paused</span>
-            </div>
+              <div class="justify-self-end xl:justify-self-start">
+                <StatusBadge :status="monitor.status" />
+                <span v-if="!monitor.enabled" class="ml-1 text-xs font-medium text-vigil-unknown">Paused</span>
+              </div>
 
-            <div>
-              <p class="mb-1 text-[11px] font-medium uppercase tracking-wide text-vigil-muted">24h uptime</p>
-              <p class="text-sm font-semibold tabular-nums text-vigil-ink">{{ uptimeLabel(monitor.uptime24Hours.ratio) }}</p>
-            </div>
+              <div class="col-span-1">
+                <p class="text-[11px] text-vigil-muted xl:hidden">24h</p>
+                <p class="font-vigil-mono text-sm tabular-nums text-vigil-ink">{{ uptimeLabel(monitor.uptime24Hours.ratio) }}</p>
+              </div>
 
-            <div class="hidden lg:block">
-              <p class="mb-1 text-[11px] font-medium uppercase tracking-wide text-vigil-muted">Last check</p>
-              <p class="text-sm text-vigil-ink">{{ lastCheckedLabel(monitor.lastCheckedAt) }}</p>
-              <p class="mt-1 text-xs text-vigil-muted">Every {{ monitor.intervalSeconds }} seconds</p>
-            </div>
+              <div class="hidden xl:block">
+                <p class="text-sm text-vigil-ink">{{ lastCheckedLabel(monitor.lastCheckedAt) }}</p>
+                <p class="mt-0.5 text-xs text-vigil-muted">Every {{ monitor.intervalSeconds }} sec</p>
+              </div>
 
-            <div class="flex items-center justify-end gap-1">
-              <button
-                class="grid size-9 place-items-center rounded-lg text-vigil-muted transition-colors hover:bg-vigil-brand-soft hover:text-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand disabled:opacity-50"
-                type="button"
-                :aria-label="monitor.enabled ? `Pause ${monitor.name}` : `Resume ${monitor.name}`"
-                :title="monitor.enabled ? 'Pause monitor' : 'Resume monitor'"
-                :disabled="pendingActionID !== null"
-                @click="toggleMonitor(monitor)"
-              >
-                <component :is="monitor.enabled ? Pause : Play" :size="17" :stroke-width="1.9" aria-hidden="true" />
-              </button>
-              <button
-                class="grid size-9 place-items-center rounded-lg text-vigil-muted transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50"
-                type="button"
-                :aria-label="`Delete ${monitor.name}`"
-                title="Delete monitor"
-                :disabled="pendingActionID !== null"
-                @click="deleteTarget = monitor"
-              >
-                <Trash2 :size="17" :stroke-width="1.8" aria-hidden="true" />
-              </button>
-            </div>
-          </li>
-        </ul>
+              <div class="col-span-2 flex items-center justify-end gap-3 xl:col-span-1">
+                <button
+                  class="inline-flex min-h-9 items-center gap-1.5 rounded-sm px-1 text-xs font-medium text-vigil-muted hover:text-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand disabled:opacity-50"
+                  type="button"
+                  :aria-label="monitor.enabled ? `Pause ${monitor.name}` : `Resume ${monitor.name}`"
+                  :disabled="pendingActionID !== null"
+                  @click="toggleMonitor(monitor)"
+                >
+                  <component :is="monitor.enabled ? Pause : Play" :size="15" aria-hidden="true" />
+                  {{ pendingActionID === monitor.id ? 'Saving…' : monitor.enabled ? 'Pause' : 'Resume' }}
+                </button>
+                <button
+                  class="inline-flex min-h-9 items-center gap-1.5 rounded-sm px-1 text-xs font-medium text-vigil-muted hover:text-vigil-down focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-down disabled:opacity-50"
+                  type="button"
+                  :aria-label="`Delete ${monitor.name}`"
+                  :disabled="pendingActionID !== null"
+                  @click="deleteTarget = monitor"
+                >
+                  <Trash2 :size="15" aria-hidden="true" />
+                  Delete
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
       </section>
     </section>
 
-    <dialog
-      ref="createDialog"
-      class="max-h-[90vh] w-[min(42rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-vigil-line bg-white p-6 text-vigil-ink shadow-2xl backdrop:bg-slate-950/35 sm:p-7"
-      aria-labelledby="create-monitor-title"
-    >
-      <div class="mb-6 flex items-center justify-between gap-4">
+    <dialog ref="createDialog" class="max-h-[90vh] w-[min(42rem,calc(100%-2rem))] overflow-y-auto rounded-lg border border-vigil-rule bg-vigil-surface p-6 text-vigil-ink shadow-xl backdrop:bg-vigil-ink/35 sm:p-7" aria-labelledby="create-monitor-title">
+      <div class="mb-6 flex items-center justify-between gap-4 border-b border-vigil-rule pb-4">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-[0.13em] text-vigil-brand">New service</p>
+          <p class="text-xs font-medium text-vigil-brand">New service</p>
           <h2 id="create-monitor-title" class="mt-1 text-xl font-semibold tracking-tight">Add a monitor</h2>
         </div>
-        <button
-          class="min-h-9 rounded-lg border border-vigil-line px-3 text-sm text-vigil-muted transition-colors hover:bg-vigil-canvas hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          type="button"
-          @click="closeCreateDialog"
-        >
+        <button class="min-h-9 rounded-sm px-2 text-sm text-vigil-muted hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" type="button" @click="closeCreateDialog">
           Close
         </button>
       </div>
-      <p v-if="createError" class="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">
+      <p v-if="createError" class="mb-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         {{ createError }}
       </p>
-      <MonitorForm
-        tone="light"
-        :disabled="creating"
-        :field-errors="formErrors"
-        submit-label="Create monitor"
-        @submit="submitCreate"
-      />
+      <MonitorForm :disabled="creating" :field-errors="formErrors" submit-label="Create monitor" @submit="submitCreate" />
     </dialog>
 
     <ConfirmDialog
-      tone="light"
       :open="deleteTarget !== null"
       title="Delete monitor?"
       :message="`Delete ${deleteTarget?.name ?? 'this monitor'} and its check history? This cannot be undone.`"

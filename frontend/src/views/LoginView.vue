@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError } from '../api/client'
 import { getCapabilities, startGoogleLogin } from '../api/auth'
 import FormField from '../components/FormField.vue'
+import GuestShell from '../components/GuestShell.vue'
 import { useSession } from '../composables/useSession'
 
 const route = useRoute()
@@ -64,21 +65,18 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
-    <section class="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-xl sm:p-8" aria-labelledby="login-title">
-      <RouterLink class="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4" to="/login">
-        Vigil
-      </RouterLink>
+  <GuestShell header-link-label="Create account" :header-link-to="{ name: 'register' }">
+    <section class="w-full max-w-md border-y border-vigil-rule bg-vigil-surface px-5 py-8 sm:border sm:px-8" aria-labelledby="login-title">
       <h1 id="login-title" class="mt-6 text-2xl font-semibold">Sign in</h1>
-      <p class="mt-2 text-sm text-slate-300">Keep an eye on the services that matter to you.</p>
+      <p class="mt-2 text-sm text-vigil-muted">Keep an eye on the services that matter to you.</p>
 
-      <p v-if="googleError" class="mt-5 rounded-md border border-red-800 bg-red-950/60 p-3 text-sm text-red-200" role="alert">
+      <p v-if="googleError" class="mt-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         Google sign-in did not work. Please try again or use your email and password.
       </p>
-      <p v-if="resetSuccess" class="mt-5 rounded-md border border-emerald-800 bg-emerald-950/60 p-3 text-sm text-emerald-200" role="status">
+      <p v-if="resetSuccess" class="mt-5 border-l-2 border-vigil-up bg-vigil-up-soft px-4 py-3 text-sm text-vigil-up" role="status">
         Your password was reset. Sign in with your new password.
       </p>
-      <p v-if="errorMessage" class="mt-5 rounded-md border border-red-800 bg-red-950/60 p-3 text-sm text-red-200" role="alert">
+      <p v-if="errorMessage" class="mt-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         {{ errorMessage }}
       </p>
 
@@ -104,12 +102,12 @@ async function submit(): Promise<void> {
           required
         />
         <div class="flex justify-end text-sm">
-          <RouterLink class="text-emerald-300 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'forgot-password' }">
+          <RouterLink class="text-vigil-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'forgot-password' }">
             Forgot password?
           </RouterLink>
         </div>
         <button
-          class="min-h-11 rounded-md bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-600 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
+          class="min-h-11 rounded-md bg-vigil-brand px-4 py-2 font-medium text-white hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
           type="submit"
           :disabled="submitting"
         >
@@ -118,13 +116,13 @@ async function submit(): Promise<void> {
       </form>
 
       <template v-if="googleEnabled">
-        <div class="my-5 flex items-center gap-3 text-xs text-slate-500" aria-hidden="true">
-          <span class="h-px flex-1 bg-slate-700" />
-          <span>OR</span>
-          <span class="h-px flex-1 bg-slate-700" />
+        <div class="my-5 flex items-center gap-3 text-xs text-vigil-muted" aria-hidden="true">
+          <span class="h-px flex-1 bg-vigil-rule" />
+          <span>or</span>
+          <span class="h-px flex-1 bg-vigil-rule" />
         </div>
         <button
-          class="min-h-11 w-full rounded-md border border-slate-600 px-4 py-2 font-medium hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2"
+          class="min-h-11 w-full rounded-md border border-vigil-rule px-4 py-2 font-medium hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2"
           type="button"
           @click="startGoogleLogin"
         >
@@ -132,12 +130,6 @@ async function submit(): Promise<void> {
         </button>
       </template>
 
-      <p class="mt-6 text-center text-sm text-slate-300">
-        New to Vigil?
-        <RouterLink class="text-emerald-300 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'register' }">
-          Create an account
-        </RouterLink>
-      </p>
     </section>
-  </main>
+  </GuestShell>
 </template>

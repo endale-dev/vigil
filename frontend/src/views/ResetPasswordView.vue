@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ApiError } from '../api/client'
 import { resetPassword } from '../api/auth'
 import FormField from '../components/FormField.vue'
+import GuestShell from '../components/GuestShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,17 +40,14 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center bg-slate-950 px-4 py-10 text-slate-100">
-    <section class="w-full max-w-md rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-xl sm:p-8" aria-labelledby="reset-title">
-      <RouterLink class="text-lg font-semibold focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'home' }">
-        Vigil
-      </RouterLink>
+  <GuestShell header-link-label="Back to sign in" :header-link-to="{ name: 'login' }">
+    <section class="w-full max-w-md border-y border-vigil-rule bg-vigil-surface px-5 py-8 sm:border sm:px-8" aria-labelledby="reset-title">
       <h1 id="reset-title" class="mt-6 text-2xl font-semibold">Choose a new password</h1>
 
-      <p v-if="!token" class="mt-4 text-sm text-red-200" role="alert">
+      <p v-if="!token" class="mt-4 text-sm text-vigil-down" role="alert">
         This reset link is missing its token. Request a new link to continue.
       </p>
-      <p v-if="errorMessage" class="mt-4 rounded-md border border-red-800 bg-red-950/60 p-3 text-sm text-red-200" role="alert">
+      <p v-if="errorMessage" class="mt-4 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         {{ errorMessage }}
       </p>
 
@@ -65,9 +63,9 @@ async function submit(): Promise<void> {
           :error="passwordError"
           required
         />
-        <p class="-mt-3 text-xs text-slate-400">Use 8 to 128 bytes.</p>
+        <p class="-mt-3 text-xs text-vigil-muted">Use 8 to 128 bytes.</p>
         <button
-          class="min-h-11 rounded-md bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-600 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
+          class="min-h-11 rounded-md bg-vigil-brand px-4 py-2 font-medium text-white hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
           type="submit"
           :disabled="submitting"
         >
@@ -75,9 +73,6 @@ async function submit(): Promise<void> {
         </button>
       </form>
 
-      <RouterLink class="mt-6 inline-block text-sm text-emerald-300 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'forgot-password' }">
-        Request a new reset link
-      </RouterLink>
     </section>
-  </main>
+  </GuestShell>
 </template>

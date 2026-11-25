@@ -5,29 +5,27 @@ import type { MonitorStatus, OverallStatus } from '../api/types'
 
 const props = defineProps<{
   status: MonitorStatus | OverallStatus
-  tone?: 'dark' | 'light'
 }>()
 
 const presentation = computed(() => {
-  const light = props.tone === 'light'
   switch (props.status) {
     case 'up':
-      return { label: 'Up', icon: CircleCheck, classes: light ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-emerald-700 bg-emerald-950 text-emerald-200' }
+      return { label: 'Up', icon: CircleCheck, classes: 'border-vigil-up/25 bg-vigil-up-soft text-vigil-up' }
     case 'operational':
-      return { label: 'Operational', icon: CircleCheck, classes: light ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-emerald-700 bg-emerald-950 text-emerald-200' }
+      return { label: 'Operational', icon: CircleCheck, classes: 'border-vigil-up/25 bg-vigil-up-soft text-vigil-up' }
     case 'down':
-      return { label: 'Down', icon: CircleX, classes: light ? 'border-red-200 bg-red-50 text-red-800' : 'border-red-700 bg-red-950 text-red-200' }
+      return { label: 'Down', icon: CircleX, classes: 'border-vigil-down/25 bg-vigil-down-soft text-vigil-down' }
     case 'degraded':
-      return { label: 'Degraded', icon: TriangleAlert, classes: light ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-amber-700 bg-amber-950 text-amber-200' }
+      return { label: 'Degraded', icon: TriangleAlert, classes: 'border-vigil-warn/25 bg-vigil-warn-soft text-vigil-warn' }
     default:
-      return { label: 'Unknown', icon: CircleHelp, classes: light ? 'border-slate-200 bg-slate-100 text-slate-700' : 'border-slate-600 bg-slate-900 text-slate-200' }
+      return { label: 'Unknown', icon: CircleHelp, classes: 'border-vigil-unknown/20 bg-vigil-unknown/10 text-vigil-unknown' }
   }
 })
 </script>
 
 <template>
   <span
-    class="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold"
+    class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold"
     :class="presentation.classes"
     role="status"
     :aria-label="`Status: ${presentation.label}`"
