@@ -188,12 +188,12 @@ function lastCheckedLabel(value: string | null): string {
             <p v-if="overallStatus.detail" class="text-sm text-vigil-muted">{{ overallStatus.detail }}</p>
           </div>
         </div>
-        <p class="px-3 text-sm text-vigil-muted sm:px-0">
+        <p v-if="monitors.length > 0" class="px-3 text-sm text-vigil-muted sm:px-0">
           {{ activeMonitors.length }} active <span class="mx-1 text-vigil-rule">·</span> {{ pausedCount }} paused
         </p>
       </div>
 
-      <section class="grid grid-cols-2 border-b border-vigil-rule sm:grid-cols-4" aria-label="Monitor summary">
+      <section v-if="monitors.length > 0" class="grid grid-cols-2 border-b border-vigil-rule sm:grid-cols-4" aria-label="Monitor summary">
         <div class="border-b border-vigil-rule py-4 pr-4 sm:border-b-0 sm:pr-6">
           <p class="text-sm text-vigil-muted">Active</p>
           <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ activeMonitors.length }}</p>

@@ -81,7 +81,7 @@ function toggleSidebar(): void {
           :aria-label="item.label"
           :title="item.label"
           class="relative flex min-h-11 items-center gap-3 rounded-md text-sm font-medium text-vigil-muted transition-colors hover:bg-vigil-paper hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          :class="[isSidebarCollapsed ? 'justify-center px-2' : 'px-3', item.label === 'Settings' ? 'mt-3 border-t border-vigil-rule pt-3' : '']"
+          :class="isSidebarCollapsed ? 'justify-center px-2' : 'px-3'"
           active-class="!bg-vigil-brand-soft !text-vigil-brand before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-vigil-brand"
         >
           <component :is="item.icon" :size="18" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
@@ -92,7 +92,7 @@ function toggleSidebar(): void {
       <div class="mt-auto border-t border-vigil-rule p-3" :class="isSidebarCollapsed ? '' : 'lg:p-4'">
         <div class="flex justify-center" :class="isSidebarCollapsed ? '' : 'lg:justify-start'">
           <RouterLink class="flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :class="isSidebarCollapsed ? 'size-9 justify-center' : 'w-full'" :to="{ name: 'profile' }" :aria-label="`Profile for ${user?.name ?? 'Vigil user'}`" :title="isSidebarCollapsed ? `${user?.name ?? 'Vigil user'} · Profile` : undefined" active-class="!text-vigil-brand">
-            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-vigil-brand-soft text-xs font-semibold text-vigil-brand" aria-hidden="true">
+            <span class="grid size-9 shrink-0 place-items-center rounded-full border border-vigil-brand/30 bg-vigil-brand-soft text-xs font-semibold text-vigil-brand" aria-hidden="true">
               {{ initials }}
             </span>
             <div v-if="!isSidebarCollapsed" class="hidden min-w-0 flex-1 lg:block">

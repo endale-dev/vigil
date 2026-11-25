@@ -83,7 +83,7 @@ async function saveProfile(): Promise<void> {
 
       <section class="flex flex-wrap items-center justify-between gap-5 border-b border-vigil-rule py-7" aria-labelledby="profile-identity-title">
         <div class="flex min-w-0 items-center gap-4">
-          <span class="grid size-14 shrink-0 place-items-center rounded-full bg-vigil-brand-soft text-base font-semibold text-vigil-brand" aria-hidden="true">{{ initials }}</span>
+          <span class="grid size-14 shrink-0 place-items-center rounded-full border border-vigil-brand/30 bg-vigil-brand-soft text-base font-semibold text-vigil-brand" aria-hidden="true">{{ initials }}</span>
           <div class="min-w-0">
             <h2 id="profile-identity-title" class="truncate text-lg font-semibold">{{ user.name }}</h2>
             <p class="mt-1 break-all text-sm text-vigil-muted">{{ user.email }}</p>
