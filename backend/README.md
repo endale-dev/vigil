@@ -40,13 +40,13 @@ The backend listens on `http://localhost:8080`. In a second terminal, start the 
 npm --prefix frontend run dev
 ```
 
-Open `http://localhost:3000`. Vite forwards `/api` requests to the backend. The backend reads configuration from process environment variables; it does not load `.env` files. Docker Compose reads `backend/.env` as described below.
+Open `http://localhost:3000`. Vite forwards `/api` requests to the backend. The backend loads the optional `.env` file in its working directory (`backend/.env` when using `make run` or `go -C backend run .`). Process environment variables take precedence, including explicitly empty values. Restart the backend after changing the file. Docker Compose also reads `backend/.env` as described below.
 
 For a production-style local build, run `make build`; the command builds the frontend, copies it into `backend/dist`, and creates `backend/bin/vigil` (or `vigil.exe` on Windows). The production server serves that embedded frontend from the backend origin.
 
 ## Configuration
 
-Copy `backend/.env.example` to `backend/.env` as a reference. For direct local runs, export the variables in your shell; the Go process does not read that file.
+Copy `backend/.env.example` to `backend/.env` and fill in your local settings, including `TELEGRAM_BOT_TOKEN` to enable Telegram. Alternatively, export variables in your shell. The local file supports `KEY=value`, single or double quotes, comments, and optional `export` prefixes; shell expansion and multiline values are not supported. It is ignored by Git. After restarting the backend, reload the app, start a chat with your bot, and save your numeric chat ID under Alerts.
 
 | Variable | Required | Default or purpose |
 | --- | --- | --- |

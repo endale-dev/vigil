@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+
+	apperrors "github.com/endale-dev/vigil/internal/errors"
 )
 
 type forgotPasswordRequest struct {
@@ -58,6 +61,9 @@ func (handler *AuthenticationHandler) ChangePassword(writer http.ResponseWriter,
 	if err := handler.authentication.ChangePassword(
 		request.Context(), session.User.ID, session.Session.ID, input.CurrentPassword, input.NewPassword,
 	); err != nil {
+		if errors.Is(err, apperrors.ErrInvalidCredentials) {
+			err = apperrors.ValidationError{Field: "currentPassword", Message: "The current password is incorrect."}
+		}
 		handler.writeError(writer, err)
 		return
 	}

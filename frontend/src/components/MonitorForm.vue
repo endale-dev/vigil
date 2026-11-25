@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { MonitorDTO, MonitorRequest, MonitorType } from '../api/types'
 import FormField from './FormField.vue'
+import SelectField from './SelectField.vue'
 
 type FormState = Omit<MonitorRequest, 'intervalSeconds' | 'timeoutSeconds' | 'expectedStatus' | 'tlsWarnDays'> & {
   intervalSeconds: string
@@ -48,8 +49,8 @@ watch(() => props.initialValue, (value) => {
   form.value = initialForm(value)
 }, { deep: true })
 
-function updateType(event: Event): void {
-  const type = (event.target as HTMLSelectElement).value as MonitorType
+function updateType(value: string): void {
+  const type = value as MonitorType
   if (type !== 'http') {
     form.value.expectedStatus = '0'
   } else {
@@ -65,6 +66,18 @@ function submit(): void {
   const timeoutSeconds = Number(form.value.timeoutSeconds)
   const expectedStatus = Number(form.value.expectedStatus)
   validationError.value = ''
+  let target = form.value.target.trim()
+  if (form.value.type === 'http') {
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) target = `https://${target.replace(/^\/\//, '')}`
+    try {
+      const url = new URL(target)
+      if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || /\s/.test(target) || url.username || url.password) throw new Error('Invalid URL')
+      target = url.href
+    } catch {
+      validationError.value = 'Enter a valid website address, such as example.com/health. Only HTTP and HTTPS URLs are supported.'
+      return
+    }
+  }
   if (timeoutSeconds > intervalSeconds) {
     validationError.value = 'Timeout cannot be greater than the check interval.'
     return
@@ -77,7 +90,7 @@ function submit(): void {
   emit('submit', {
     name: form.value.name,
     type: form.value.type,
-    target: form.value.target,
+    target,
     intervalSeconds,
     timeoutSeconds,
     expectedStatus: form.value.type === 'http' ? expectedStatus : 0,
@@ -89,33 +102,25 @@ function submit(): void {
 
 <template>
   <form class="grid gap-5" @submit.prevent="submit">
-    <FormField
-      id="monitor-name"
-
-      :model-value="form.name"
-      @update:model-value="form.name = $event"
-      label="Monitor name"
-      autocomplete="off"
-      :max-length="80"
-      :disabled="disabled"
-      :error="fieldErrors?.name"
-      required
-    />
-
-    <div class="grid gap-1.5">
-      <label class="text-sm font-medium" for="monitor-type">Monitor type</label>
-      <select
-        id="monitor-type"
-        :value="form.type"
-        class="min-h-10 rounded-md border border-vigil-rule bg-vigil-surface px-3 py-2 text-vigil-ink outline-none focus-visible:ring-2 focus-visible:ring-vigil-brand disabled:cursor-not-allowed disabled:opacity-60"
+    <div class="grid items-start gap-4 sm:grid-cols-[1.5fr_1fr]">
+      <FormField
+        id="monitor-name"
+        :model-value="form.name"
+        @update:model-value="form.name = $event"
+        label="Monitor name"
+        placeholder="e.g. Production API"
+        autocomplete="off"
+        autofocus
+        :max-length="80"
         :disabled="disabled"
-        @change="updateType"
-      >
-        <option value="http">HTTP</option>
-        <option value="tcp">TCP</option>
-        <option value="tls">TLS certificate</option>
-      </select>
-      <p v-if="fieldErrors?.type" class="text-sm text-vigil-down">{{ fieldErrors.type }}</p>
+        :error="fieldErrors?.name"
+        required
+      />
+
+      <SelectField id="monitor-type" label="Monitor type" :model-value="form.type" :disabled="disabled" :error="fieldErrors?.type"
+        :options="[{ value: 'http', label: 'HTTP / HTTPS', description: 'Website or API availability' }, { value: 'tcp', label: 'TCP', description: 'Host and port connectivity' }, { value: 'tls', label: 'TLS certificate', description: 'Certificate validity and expiry' }]"
+        @update:model-value="updateType" />
+
     </div>
 
     <FormField
@@ -124,8 +129,10 @@ function submit(): void {
       :model-value="form.target"
       @update:model-value="form.target = $event"
       :label="form.type === 'http' ? 'URL' : 'Host and port'"
-      :type="form.type === 'http' ? 'url' : 'text'"
-      :placeholder="form.type === 'http' ? 'https://example.com/health' : 'example.com:443'"
+      type="text"
+      :inputmode="form.type === 'http' ? 'url' : 'text'"
+      :placeholder="form.type === 'http' ? 'example.com/health' : 'example.com:443'"
+      :hint="form.type === 'http' ? 'HTTPS is added automatically. Include http:// if your endpoint requires HTTP.' : 'Enter a hostname and port, such as example.com:443.'"
       :disabled="disabled"
       :error="fieldErrors?.target"
       required
@@ -155,7 +162,7 @@ function submit(): void {
         :min="1"
         :max="Math.min(30, Number(form.intervalSeconds) || 30)"
         :disabled="disabled"
-        :error="timeoutError()"
+        :error="timeoutExceedsInterval ? 'Timeout must be within the check interval.' : timeoutError()"
         required
       />
     </div>
@@ -166,7 +173,8 @@ function submit(): void {
 
       :model-value="form.expectedStatus"
       @update:model-value="form.expectedStatus = $event"
-      label="Expected HTTP status (0 accepts any success status)"
+      label="Expected HTTP status"
+      hint="Enter 0 to accept any successful HTTP response."
       type="number"
       :min="0"
       :max="599"
@@ -190,10 +198,14 @@ function submit(): void {
       required
     />
 
-    <label class="flex items-center gap-2 text-sm">
-      <input v-model="form.public" type="checkbox" class="size-4 accent-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2" :disabled="disabled" />
-      Show this monitor on my public status page
-    </label>
+    <div>
+      <label class="flex items-center gap-2 text-sm">
+        <input v-model="form.public" type="checkbox" class="size-4 accent-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2"
+          :disabled="disabled" aria-describedby="monitor-visibility-hint" />
+        Share on my public page
+      </label>
+      <p id="monitor-visibility-hint" class="mt-1 pl-6 text-xs text-vigil-muted">Anyone with the link can see this monitor’s name, status, uptime, and recent checks. Alert delivery is set separately.</p>
+    </div>
 
     <p v-if="validationError" class="text-sm text-vigil-down" role="alert">
       {{ validationError }}
@@ -209,7 +221,7 @@ function submit(): void {
       type="submit"
       :disabled="disabled || timeoutExceedsInterval"
     >
-      {{ submitLabel }}
+      {{ disabled ? 'Saving…' : submitLabel }}
     </button>
   </form>
 </template>

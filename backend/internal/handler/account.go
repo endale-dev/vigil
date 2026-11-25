@@ -36,6 +36,13 @@ type profileRequest struct {
 	Name string `json:"name"`
 }
 
+type notificationsRequest struct {
+	EmailAlerts      bool    `json:"emailAlerts"`
+	EmailDestination *string `json:"emailDestination"`
+	TelegramChatID   string  `json:"telegramChatId"`
+	TelegramDisabled *bool   `json:"telegramDisabled"`
+}
+
 func NewAccountHandler(authentication sessionAuthenticator, account accountService, capabilities CapabilitiesDTO, logger *slog.Logger) (*AccountHandler, error) {
 	if authentication == nil || account == nil || logger == nil {
 		return nil, errors.New("account handler dependencies are incomplete")
@@ -48,14 +55,21 @@ func (handler *AccountHandler) UpdateNotifications(writer http.ResponseWriter, r
 	if !ok {
 		return
 	}
-	var input NotifyDTO
+	var input notificationsRequest
 	if err := decodeJSON(writer, request, &input); err != nil {
 		handler.writeError(writer, err)
 		return
 	}
-	user, err := handler.account.UpdateNotifications(request.Context(), session.User.ID, domain.NotifySettings{
-		EmailAlerts: input.EmailAlerts, TelegramChatID: input.TelegramChatID,
-	})
+	notify := session.User.Notify
+	notify.EmailAlerts = input.EmailAlerts
+	notify.TelegramChatID = input.TelegramChatID
+	if input.EmailDestination != nil {
+		notify.EmailDestination = *input.EmailDestination
+	}
+	if input.TelegramDisabled != nil {
+		notify.TelegramDisabled = *input.TelegramDisabled
+	}
+	user, err := handler.account.UpdateNotifications(request.Context(), session.User.ID, notify)
 	if err != nil {
 		handler.writeError(writer, err)
 		return

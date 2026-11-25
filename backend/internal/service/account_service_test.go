@@ -36,6 +36,36 @@ func TestAccountServiceUpdatesNotifications(t *testing.T) {
 	}
 }
 
+func TestAccountServiceValidatesEmailDestination(t *testing.T) {
+	users := &memoryUsers{stored: map[domain.ID]*domain.User{
+		"user-1": {ID: "user-1", Email: "owner@example.test", Notify: domain.NotifySettings{TelegramChatID: "12345"}},
+	}}
+	account, err := NewAccountService(users, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	notify := domain.NotifySettings{EmailAlerts: true, EmailDestination: "  ops@example.test  ", TelegramChatID: "12345", TelegramDisabled: true}
+	user, err := account.UpdateNotifications(ctx, "user-1", notify)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Notify.EmailDestination != "ops@example.test" || user.Email != "owner@example.test" || !user.Notify.TelegramDisabled {
+		t.Fatalf("unexpected user settings: %+v", user)
+	}
+	notify.EmailDestination = "ops@example.test,other@example.test"
+	_, err = account.UpdateNotifications(ctx, "user-1", notify)
+	var invalid apperrors.ValidationError
+	if !errors.As(err, &invalid) || invalid.Field != "emailDestination" || users.stored["user-1"].Notify.EmailDestination != "ops@example.test" {
+		t.Fatalf("invalid destination update = %v, saved settings = %+v", err, users.stored["user-1"].Notify)
+	}
+	notify.EmailDestination = ""
+	user, err = account.UpdateNotifications(ctx, "user-1", notify)
+	if err != nil || user.Notify.EmailDestination != "" {
+		t.Fatalf("clear destination = %+v, %v", user, err)
+	}
+}
+
 func TestAccountServiceUpdatesAndValidatesProfileName(t *testing.T) {
 	users := &memoryUsers{stored: map[domain.ID]*domain.User{"user-1": {ID: "user-1", Name: "Ada"}}}
 	account, err := NewAccountService(users, false)

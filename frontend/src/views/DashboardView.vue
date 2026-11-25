@@ -1,13 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import {
-  Activity,
-  Pause,
-  Play,
-  Plus,
-  Trash2,
-} from '@lucide/vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
+import { Check, ChevronDown, Filter, Pause, Play, Plus, RefreshCw, Search, Trash2, X } from '@lucide/vue'
 import { ApiError } from '../api/client'
 import {
   createMonitor,
@@ -21,6 +15,7 @@ import ConfirmDialog from '../components/ConfirmDialog.vue'
 import MonitorForm from '../components/MonitorForm.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import WorkspaceShell from '../components/WorkspaceShell.vue'
+import { checkIntervalLabel } from '../format'
 import { usePolling } from '../composables/usePolling'
 
 const {
@@ -31,6 +26,51 @@ const {
 } = usePolling(listMonitors, 15_000)
 
 const monitors = computed(() => monitorData.value ?? [])
+const isEmpty = computed(() => monitorData.value !== null && !monitorError.value && !monitors.value.length)
+const search = ref('')
+const router = useRouter()
+function openMonitorRow(event: MouseEvent, id: string): void {
+  if ((event.target as Element).closest('a,button,input') || window.getSelection()?.type === 'Range') return
+  const route = { name: 'monitor-detail', params: { id } }
+  if (event.ctrlKey || event.metaKey || event.button === 1) {
+    window.open(router.resolve(route).href, '_blank', 'noopener')
+  } else if (event.button === 0) {
+    void router.push(route)
+  }
+}
+type MonitorStatusFilter = 'all' | 'up' | 'down' | 'unknown' | 'paused'
+const statusFilter = ref<MonitorStatusFilter>('all')
+const statusFilterRoot = ref<HTMLElement | null>(null)
+const statusFilterTrigger = ref<HTMLButtonElement | null>(null)
+const statusFilterOpen = ref(false)
+const statusFilterOptionButtons = ref<HTMLButtonElement[]>([])
+const lastSynced = ref('')
+watch(monitorData, () => {
+  lastSynced.value = new Date().toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+})
+const filteredMonitors = computed(() => {
+  const term = search.value.trim().toLowerCase()
+  return monitors.value.filter(monitor => {
+    const state = monitor.enabled ? monitor.status : 'paused'
+    return (statusFilter.value === 'all' || statusFilter.value === state)
+      && [monitor.name, monitor.target, monitor.type].some(value => value.toLowerCase().includes(term))
+  })
+})
+const statusFilterOptions = computed(() => {
+  const counts: Record<MonitorStatusFilter, number> = { all: monitors.value.length, up: 0, down: 0, unknown: 0, paused: 0 }
+  monitors.value.forEach(monitor => {
+    counts[monitor.enabled ? monitor.status as Exclude<MonitorStatusFilter, 'all'> : 'paused']++
+  })
+  const options: { value: MonitorStatusFilter; label: string }[] = [
+    { value: 'all', label: 'All statuses' },
+    { value: 'up', label: 'Up' },
+    { value: 'down', label: 'Down' },
+    { value: 'unknown', label: 'Unknown' },
+    { value: 'paused', label: 'Paused' },
+  ]
+  return options.map(option => ({ ...option, count: counts[option.value] }))
+})
+const selectedStatusFilterLabel = computed(() => statusFilterOptions.value.find(option => option.value === statusFilter.value)?.label ?? 'All statuses')
 const loadError = computed(() => errorMessage(monitorError.value, 'Could not load monitors.'))
 const activeMonitors = computed(() => monitors.value.filter((monitor) => monitor.enabled))
 const pausedCount = computed(() => monitors.value.length - activeMonitors.value.length)
@@ -47,19 +87,16 @@ const uptime24Hours = computed(() => {
   return up / total
 })
 const overallStatus = computed(() => {
-  if (monitors.value.length === 0) {
-    return { title: 'Monitoring is ready', detail: 'Add your first service to begin collecting checks.', tone: 'neutral' }
-  }
   if (activeMonitors.value.length === 0) {
-    return { title: 'Monitoring is paused', detail: 'Resume a monitor to start receiving fresh checks.', tone: 'neutral' }
+    return { title: 'All monitors paused', tone: 'neutral' }
   }
   if (downCount.value > 0) {
-    return { title: 'Some services need attention', detail: `${downCount.value} active ${downCount.value === 1 ? 'monitor is' : 'monitors are'} currently down.`, tone: 'danger' }
+    return { title: `${downCount.value} ${downCount.value === 1 ? 'monitor is' : 'monitors are'} down`, tone: 'danger' }
   }
   if (unknownCount.value > 0) {
-    return { title: 'Waiting for the first checks', detail: 'Newly added services will show here as results arrive.', tone: 'neutral' }
+    return { title: 'Waiting for initial checks', tone: 'neutral' }
   }
-  return { title: 'All systems operational', detail: 'Every active monitor is reporting a healthy response.', tone: 'success' }
+  return { title: 'All systems operational', tone: 'success' }
 })
 const createDialog = ref<HTMLDialogElement | null>(null)
 const creating = ref(false)
@@ -69,13 +106,71 @@ const actionError = ref('')
 const pendingActionID = ref<string | null>(null)
 const deleteTarget = ref<MonitorListDTO | null>(null)
 
+function focusStatusFilterOption(index: number): void {
+  statusFilterOptionButtons.value[index]?.focus()
+}
+
+function setStatusFilterOptionButton(element: unknown, index: number): void {
+  if (element instanceof HTMLButtonElement) {
+    statusFilterOptionButtons.value[index] = element
+  }
+}
+
+async function openStatusFilter(focusIndex?: number): Promise<void> {
+  statusFilterOpen.value = true
+  await nextTick()
+  const selectedIndex = statusFilterOptions.value.findIndex(option => option.value === statusFilter.value)
+  focusStatusFilterOption(focusIndex ?? Math.max(selectedIndex, 0))
+}
+
+function closeStatusFilter(restoreFocus = false): void {
+  statusFilterOpen.value = false
+  if (restoreFocus) {
+    nextTick(() => statusFilterTrigger.value?.focus())
+  }
+}
+
+function selectStatusFilter(value: MonitorStatusFilter): void {
+  statusFilter.value = value
+  closeStatusFilter(true)
+}
+
+function handleStatusFilterKeydown(event: KeyboardEvent, index: number): void {
+  let nextIndex: number | null = null
+  if (event.key === 'ArrowDown') nextIndex = (index + 1) % statusFilterOptions.value.length
+  if (event.key === 'ArrowUp') nextIndex = (index - 1 + statusFilterOptions.value.length) % statusFilterOptions.value.length
+  if (event.key === 'Home') nextIndex = 0
+  if (event.key === 'End') nextIndex = statusFilterOptions.value.length - 1
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeStatusFilter(true)
+    return
+  }
+  if (nextIndex !== null) {
+    event.preventDefault()
+    focusStatusFilterOption(nextIndex)
+  }
+}
+
+function handleStatusFilterPointer(event: PointerEvent): void {
+  if (statusFilterOpen.value && !statusFilterRoot.value?.contains(event.target as Node)) {
+    closeStatusFilter()
+  }
+}
+
+onMounted(() => document.addEventListener('pointerdown', handleStatusFilterPointer))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', handleStatusFilterPointer))
+
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
-function openCreateDialog(): void {
+const formVersion = ref(0)
+async function openCreateDialog(): Promise<void> {
+  formVersion.value++
   createError.value = ''
   formErrors.value = {}
+  await nextTick()
   createDialog.value?.showModal()
 }
 
@@ -156,165 +251,116 @@ function lastCheckedLabel(value: string | null): string {
 
 <template>
   <WorkspaceShell>
-    <section class="grid gap-0" aria-label="Monitor overview" :aria-busy="isLoading">
-      <header class="flex flex-wrap items-end justify-between gap-4 pb-7">
+    <section aria-labelledby="overview-title">
+      <header class="console-page-head">
         <div>
-          <p class="text-sm font-medium text-vigil-brand">Your workspace</p>
-          <h1 class="mt-2 text-[1.9rem] font-semibold leading-tight tracking-[-0.04em] text-vigil-ink sm:text-3xl">Overview</h1>
+          <h1 id="overview-title" class="console-title">Overview</h1>
+          <p v-if="monitors.length && !monitorError" class="system-health" :data-tone="overallStatus.tone" role="status">
+            {{ overallStatus.title }}
+          </p>
         </div>
-        <button
-          class="inline-flex min-h-11 items-center gap-2 rounded-md bg-vigil-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          type="button"
-          @click="openCreateDialog"
-        >
-          <Plus :size="17" :stroke-width="2" aria-hidden="true" />
+        <button v-if="!isEmpty" type="button" class="console-button primary" @click="openCreateDialog">
+          <Plus :size="16" aria-hidden="true" />
           Add monitor
         </button>
       </header>
 
-      <div
-        class="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-y py-4"
-        :class="overallStatus.tone === 'danger' ? 'border-vigil-down/35 bg-vigil-down-soft/45' : 'border-vigil-rule'"
-        role="status"
-      >
-        <div class="flex min-w-0 items-center gap-3 px-3 sm:px-0">
-          <span
-            class="size-2.5 shrink-0 rounded-full"
-            :class="overallStatus.tone === 'success' ? 'bg-vigil-up' : overallStatus.tone === 'danger' ? 'bg-vigil-down' : 'bg-vigil-unknown'"
-            aria-hidden="true"
-          />
-          <div class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-            <p class="font-semibold" :class="overallStatus.tone === 'danger' ? 'text-vigil-down' : 'text-vigil-ink'">{{ overallStatus.title }}</p>
-            <p v-if="overallStatus.detail" class="text-sm text-vigil-muted">{{ overallStatus.detail }}</p>
+      <dl v-if="monitors.length" class="metric-grid" aria-label="Monitor summary">
+        <div class="metric">
+          <dt>Active monitors</dt>
+          <dd>{{ activeMonitors.length }} <small v-if="pausedCount">{{ pausedCount }} paused</small></dd>
+        </div>
+        <div class="metric"><dt>Up</dt><dd>{{ upCount }}</dd></div>
+        <div class="metric"><dt>Down</dt><dd :class="{ 'text-vigil-down': downCount }">{{ downCount }}</dd></div>
+        <div class="metric">
+          <dt>24h uptime</dt>
+          <dd v-if="uptime24Hours !== null">{{ uptimeLabel(uptime24Hours) }}</dd>
+          <dd v-else><span aria-hidden="true">—</span><span class="sr-only">Awaiting checks</span></dd>
+        </div>
+      </dl>
+
+      <section class="monitor-panel console-panel" aria-labelledby="monitor-list-title">
+        <div class="monitor-heading">
+          <h2 id="monitor-list-title" class="section-title">Monitors</h2>
+          <div v-if="monitors.length" class="monitor-toolbar">
+            <label class="search-control"><Search :size="15" aria-hidden="true" /><input v-model="search" aria-label="Search monitors" type="search" placeholder="Search monitors…" /></label>
+            <div ref="statusFilterRoot" class="status-filter">
+              <button ref="statusFilterTrigger" type="button" class="status-filter-trigger" aria-label="Filter monitors by status"
+                aria-haspopup="menu" :aria-expanded="statusFilterOpen" aria-controls="monitor-status-filter-menu"
+                @click="statusFilterOpen ? closeStatusFilter() : openStatusFilter()"
+                @keydown.down.prevent="openStatusFilter()">
+                <Filter :size="14" aria-hidden="true" />
+                <span>{{ selectedStatusFilterLabel }}</span>
+                <ChevronDown :size="14" class="status-filter-chevron" aria-hidden="true" />
+              </button>
+              <div v-if="statusFilterOpen" ref="statusFilterMenu" id="monitor-status-filter-menu" class="status-filter-menu" role="menu" aria-label="Filter monitors by status">
+                <p class="status-filter-menu-heading">Monitor status</p>
+                <button v-for="(option, index) in statusFilterOptions" :key="option.value" :ref="element => setStatusFilterOptionButton(element, index)"
+                  type="button" role="menuitemradio" class="status-filter-option" :aria-checked="statusFilter === option.value" :tabindex="statusFilter === option.value ? 0 : -1"
+                  @click="selectStatusFilter(option.value)" @keydown="handleStatusFilterKeydown($event, index)">
+                  <span v-if="option.value !== 'all'" class="status-filter-dot" :data-status="option.value" aria-hidden="true"></span>
+                  <span v-else class="status-filter-all" aria-hidden="true"><Filter :size="13" /></span>
+                  <span class="status-filter-option-label">{{ option.label }}</span>
+                  <span class="status-filter-count">{{ option.count }}</span>
+                  <Check v-if="statusFilter === option.value" :size="15" class="status-filter-check" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-        <p v-if="monitors.length > 0" class="px-3 text-sm text-vigil-muted sm:px-0">
-          {{ activeMonitors.length }} active <span class="mx-1 text-vigil-rule">·</span> {{ pausedCount }} paused
-        </p>
-      </div>
-
-      <section v-if="monitors.length > 0" class="grid grid-cols-2 border-b border-vigil-rule sm:grid-cols-4" aria-label="Monitor summary">
-        <div class="border-b border-vigil-rule py-4 pr-4 sm:border-b-0 sm:pr-6">
-          <p class="text-sm text-vigil-muted">Active</p>
-          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ activeMonitors.length }}</p>
+        <p v-if="actionError" class="console-notice danger" role="alert">{{ actionError }}</p>
+        <div v-if="monitorError" class="console-notice danger" role="alert">
+          {{ monitorData ? 'Showing the last available results.' : '' }} {{ loadError }}
+          <button type="button" class="text-action" @click="refresh">Try again</button>
         </div>
-        <div class="border-b border-l border-vigil-rule py-4 pl-4 sm:border-b-0 sm:px-6">
-          <p class="text-sm text-vigil-muted">Up</p>
-          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-up">{{ upCount }}</p>
-        </div>
-        <div class="py-4 pr-4 sm:border-l sm:border-vigil-rule sm:px-6">
-          <p class="text-sm text-vigil-muted">Down</p>
-          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums" :class="downCount ? 'text-vigil-down' : 'text-vigil-ink'">{{ downCount }}</p>
-        </div>
-        <div class="border-l border-vigil-rule py-4 pl-4 sm:pl-6">
-          <p class="text-sm text-vigil-muted">24h success</p>
-          <p v-if="uptime24Hours !== null" class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
-          <p v-else class="mt-2 text-sm font-medium text-vigil-muted">Awaiting checks</p>
-        </div>
-      </section>
-
-      <section class="pt-8" aria-labelledby="monitor-list-title">
-        <div class="flex items-baseline justify-between gap-4 pb-3">
-          <h2 id="monitor-list-title" class="text-lg font-semibold tracking-tight">Monitors</h2>
-          <p v-if="monitors.length" class="text-xs text-vigil-muted">Refreshes every 15 seconds</p>
-        </div>
-
-        <p v-if="actionError" class="mb-4 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
-          {{ actionError }}
-        </p>
-
-        <div v-if="isLoading && !monitorData" class="border-y border-vigil-rule py-10 text-sm text-vigil-muted" role="status">
-          Loading monitors…
-        </div>
-        <div v-else-if="monitorError && !monitorData" class="border-y border-vigil-rule py-8">
-          <p class="text-sm text-vigil-down" role="alert">{{ loadError }}</p>
-          <button class="mt-3 text-sm font-semibold text-vigil-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2" type="button" @click="refresh">
-            Try again
+        <div v-if="!monitorData && !monitorError" class="monitor-empty" role="status">Loading monitors…</div>
+        <div v-if="isEmpty" class="monitor-empty first-monitor">
+          <h3>No monitors yet</h3>
+          <p>Add an HTTP, TCP, or TLS endpoint to start checking its availability.</p>
+          <button type="button" class="console-button primary" @click="openCreateDialog">
+            <Plus :size="16" aria-hidden="true" />
+            Add monitor
           </button>
         </div>
-        <div v-else-if="monitors.length === 0" class="flex items-start gap-4 border-y border-vigil-rule py-7">
-          <span class="grid size-10 shrink-0 place-items-center rounded-md bg-vigil-brand-soft text-vigil-brand" aria-hidden="true">
-            <Activity :size="18" :stroke-width="1.8" />
-          </span>
-          <div>
-            <h3 class="text-sm font-semibold text-vigil-ink">Your first monitor starts here</h3>
-            <p class="mt-1 text-sm text-vigil-muted">Add a service to see its availability and check history.</p>
-          </div>
-        </div>
-        <div v-else>
-          <div class="hidden grid-cols-[minmax(0,1.7fr)_minmax(7.5rem,.7fr)_minmax(5.5rem,.6fr)_minmax(8rem,.8fr)_auto] gap-4 border-y border-vigil-rule py-2.5 text-xs font-medium text-vigil-muted xl:grid">
-            <span>Service</span>
-            <span>Status</span>
-            <span>24h uptime</span>
-            <span>Last check</span>
-            <span class="sr-only">Actions</span>
-          </div>
-          <ul aria-label="Your monitors">
-            <li v-for="monitor in monitors" :key="monitor.id" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 border-b border-vigil-rule py-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(7.5rem,.7fr)_minmax(5.5rem,.6fr)_minmax(8rem,.8fr)_auto] xl:gap-4">
-              <div class="min-w-0">
-                <RouterLink class="block truncate text-sm font-semibold text-vigil-ink underline-offset-4 hover:text-vigil-brand hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :to="{ name: 'monitor-detail', params: { id: monitor.id } }">
-                  {{ monitor.name }}
-                </RouterLink>
-                <p class="mt-1 truncate text-xs text-vigil-muted" :title="monitor.target">{{ monitor.target }} <span class="mx-1 text-vigil-rule">·</span> {{ monitor.type === 'tls' ? 'TLS' : monitor.type.toUpperCase() }}</p>
-              </div>
-
-              <div class="justify-self-end xl:justify-self-start">
-                <StatusBadge :status="monitor.status" />
-                <span v-if="!monitor.enabled" class="ml-1 text-xs font-medium text-vigil-unknown">Paused</span>
-              </div>
-
-              <div class="col-span-1">
-                <p class="text-[11px] text-vigil-muted xl:hidden">24h</p>
-                <p class="font-vigil-mono text-sm tabular-nums text-vigil-ink">{{ uptimeLabel(monitor.uptime24Hours.ratio) }}</p>
-              </div>
-
-              <div class="hidden xl:block">
-                <p class="text-sm text-vigil-ink">{{ lastCheckedLabel(monitor.lastCheckedAt) }}</p>
-                <p class="mt-0.5 text-xs text-vigil-muted">Every {{ monitor.intervalSeconds }} sec</p>
-              </div>
-
-              <div class="col-span-2 flex items-center justify-end gap-3 xl:col-span-1">
-                <button
-                  class="inline-flex min-h-9 items-center gap-1.5 rounded-sm px-1 text-xs font-medium text-vigil-muted hover:text-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand disabled:opacity-50"
-                  type="button"
-                  :aria-label="monitor.enabled ? `Pause ${monitor.name}` : `Resume ${monitor.name}`"
-                  :disabled="pendingActionID !== null"
-                  @click="toggleMonitor(monitor)"
-                >
-                  <component :is="monitor.enabled ? Pause : Play" :size="15" aria-hidden="true" />
-                  {{ pendingActionID === monitor.id ? 'Saving…' : monitor.enabled ? 'Pause' : 'Resume' }}
-                </button>
-                <button
-                  class="inline-flex min-h-9 items-center gap-1.5 rounded-sm px-1 text-xs font-medium text-vigil-muted hover:text-vigil-down focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-down disabled:opacity-50"
-                  type="button"
-                  :aria-label="`Delete ${monitor.name}`"
-                  :disabled="pendingActionID !== null"
-                  @click="deleteTarget = monitor"
-                >
-                  <Trash2 :size="15" aria-hidden="true" />
-                  Delete
-                </button>
-              </div>
-            </li>
-          </ul>
-        </div>
+        <template v-if="monitors.length">
+          <table v-if="filteredMonitors.length" class="monitor-table" aria-label="Your monitors">
+            <thead><tr><th scope="col">Service</th><th scope="col">Status</th><th scope="col">24h uptime</th><th scope="col">Last check</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody><tr v-for="monitor in filteredMonitors" :key="monitor.id" class="monitor-row" @click="openMonitorRow($event, monitor.id)" @auxclick="openMonitorRow($event, monitor.id)">
+              <th scope="row"><div class="service-text">
+                <RouterLink :to="{ name: 'monitor-detail', params: { id: monitor.id } }">{{ monitor.name }}</RouterLink>
+                <small :title="monitor.target">{{ monitor.type.toUpperCase() }} · {{ monitor.target }}</small>
+              </div></th>
+              <td class="status-cell"><StatusBadge plain :status="monitor.enabled ? monitor.status : 'paused'" /></td>
+              <td class="uptime-cell"><span class="cell-label">24h uptime</span><span class="number">{{ monitor.uptime24Hours.ratio === null ? '—' : uptimeLabel(monitor.uptime24Hours.ratio) }}</span>
+              </td>
+              <td class="last-cell"><span class="cell-label">Last check</span>{{ lastCheckedLabel(monitor.lastCheckedAt) }}<small>{{ checkIntervalLabel(monitor.intervalSeconds) }}</small></td>
+              <td class="actions-cell"><div>
+                <button type="button" class="icon-control" :aria-label="(monitor.enabled ? 'Pause ' : 'Resume ') + monitor.name" :title="monitor.enabled ? 'Pause monitor' : 'Resume monitor'" :disabled="pendingActionID !== null" @click="toggleMonitor(monitor)"><component :is="monitor.enabled ? Pause : Play" :size="15" /></button>
+                <button type="button" class="icon-control destructive" :aria-label="'Delete ' + monitor.name" title="Delete monitor" :disabled="pendingActionID !== null" @click="deleteTarget = monitor"><Trash2 :size="15" /></button>
+              </div></td>
+            </tr></tbody>
+          </table>
+          <div v-else class="monitor-empty" role="status"><h3>No matching monitors</h3><button type="button" class="text-action" @click="search = ''; statusFilter = 'all'">Clear filters</button></div>
+        </template>
+        <footer v-if="monitorData && !isEmpty" class="table-footer">
+          <span>{{ monitorError ? 'Last successful update' : 'Updated' }} {{ lastSynced }}</span>
+          <button type="button" class="icon-control" aria-label="Refresh monitors" title="Refresh monitors (auto-refreshes every 15 seconds)" :disabled="isLoading" @click="refresh">
+            <RefreshCw :size="14" :class="{ refreshing: isLoading }" aria-hidden="true" />
+          </button>
+        </footer>
       </section>
     </section>
 
+
     <dialog ref="createDialog" class="max-h-[90vh] w-[min(42rem,calc(100%-2rem))] overflow-y-auto rounded-lg border border-vigil-rule bg-vigil-surface p-6 text-vigil-ink shadow-xl backdrop:bg-vigil-ink/35 sm:p-7" aria-labelledby="create-monitor-title">
-      <div class="mb-6 flex items-center justify-between gap-4 border-b border-vigil-rule pb-4">
-        <div>
-          <p class="text-xs font-medium text-vigil-brand">New service</p>
-          <h2 id="create-monitor-title" class="mt-1 text-xl font-semibold tracking-tight">Add a monitor</h2>
-        </div>
-        <button class="min-h-9 rounded-sm px-2 text-sm text-vigil-muted hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" type="button" @click="closeCreateDialog">
-          Close
-        </button>
+      <div class="dialog-head">
+        <h2 id="create-monitor-title">Add monitor</h2>
+        <button class="icon-control" type="button" aria-label="Close monitor form" title="Close" @click="closeCreateDialog"><X :size="18" /></button>
       </div>
       <p v-if="createError" class="mb-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         {{ createError }}
       </p>
-      <MonitorForm :disabled="creating" :field-errors="formErrors" submit-label="Create monitor" @submit="submitCreate" />
+      <MonitorForm :key="formVersion" :disabled="creating" :field-errors="formErrors" submit-label="Create monitor" @submit="submitCreate" />
     </dialog>
 
     <ConfirmDialog

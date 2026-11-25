@@ -35,7 +35,7 @@ func (notifier *TelegramNotifier) Name() domain.Channel {
 }
 
 func (notifier *TelegramNotifier) Enabled(user domain.User) bool {
-	return notifier.botToken != "" && user.Notify.TelegramChatID != ""
+	return notifier.botToken != "" && user.Notify.TelegramChatID != "" && !user.Notify.TelegramDisabled
 }
 
 func (notifier *TelegramNotifier) Notify(ctx context.Context, user domain.User, alert service.Alert) error {

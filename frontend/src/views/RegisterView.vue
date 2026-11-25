@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError } from '../api/client'
 import FormField from '../components/FormField.vue'
-import GuestShell from '../components/GuestShell.vue'
+import AuthLayout from '../components/AuthLayout.vue'
 import { useSession } from '../composables/useSession'
 
 const router = useRouter()
@@ -62,10 +62,9 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <GuestShell header-link-label="Sign in" :header-link-to="{ name: 'login' }">
-    <section class="w-full max-w-md border-y border-vigil-rule bg-vigil-surface px-5 py-8 sm:border sm:px-8" aria-labelledby="register-title">
-      <h1 id="register-title" class="mt-6 text-2xl font-semibold">Create your account</h1>
-      <p class="mt-2 text-sm text-vigil-muted">Start monitoring your websites and services.</p>
+  <AuthLayout mode="register">
+    <section aria-labelledby="register-title">
+      <h1 id="register-title" class="console-title">Create your account</h1>
 
       <p v-if="errorMessage" class="mt-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         {{ errorMessage }}
@@ -75,7 +74,8 @@ async function submit(): Promise<void> {
         <FormField
           id="register-name"
           v-model="name"
-          label="Name"
+          label="Display name"
+          placeholder="Your name"
           autocomplete="name"
           :max-length="80"
           :disabled="submitting"
@@ -85,7 +85,8 @@ async function submit(): Promise<void> {
         <FormField
           id="register-email"
           v-model="email"
-          label="Email"
+          label="Email address"
+          placeholder="you@example.com"
           type="email"
           autocomplete="email"
           :max-length="254"
@@ -98,15 +99,15 @@ async function submit(): Promise<void> {
           v-model="password"
           label="Password"
           type="password"
+          revealable
           autocomplete="new-password"
-          :max-length="128"
+          hint="Use 8 to 128 bytes. Emoji and accented letters can use multiple bytes."
           :disabled="submitting"
           :error="passwordError"
           required
         />
-        <p class="-mt-3 text-xs text-vigil-muted">Use 8 to 128 bytes.</p>
         <button
-          class="min-h-11 rounded-md bg-vigil-brand px-4 py-2 font-medium text-white hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
+          class="console-button primary entry-submit"
           type="submit"
           :disabled="submitting"
         >
@@ -115,5 +116,5 @@ async function submit(): Promise<void> {
       </form>
 
     </section>
-  </GuestShell>
+  </AuthLayout>
 </template>

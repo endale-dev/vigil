@@ -16,8 +16,10 @@ func TestUserDocumentMapping(t *testing.T) {
 		GoogleSub:    "google-sub",
 		StatusSlug:   "ada-status",
 		Notify: domain.NotifySettings{
-			EmailAlerts:    true,
-			TelegramChatID: "12345",
+			EmailAlerts:      true,
+			EmailDestination: "alerts@example.com",
+			TelegramChatID:   "12345",
+			TelegramDisabled: true,
 		},
 		CreatedAt: time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC),
 	}

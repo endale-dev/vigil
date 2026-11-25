@@ -65,7 +65,7 @@ func (stub *accountServiceStub) SendTestAlert(_ context.Context, userID domain.I
 }
 
 func TestUpdateNotificationsHandlerReturnsUpdatedUser(t *testing.T) {
-	wantNotify := domain.NotifySettings{EmailAlerts: false, TelegramChatID: "-123456"}
+	wantNotify := domain.NotifySettings{EmailAlerts: false, EmailDestination: "ops@example.com", TelegramChatID: "-123456", TelegramDisabled: true}
 	accountStub := &accountServiceStub{user: &domain.User{
 		ID: "user-1", Name: "Ada", Email: "ada@example.com", PasswordHash: "private-hash",
 		StatusSlug: "status-1", Notify: wantNotify,
@@ -73,7 +73,7 @@ func TestUpdateNotificationsHandlerReturnsUpdatedUser(t *testing.T) {
 	handler := newAccountHandlerForTest(t, accountStub, &authenticationStub{authResult: service.AuthenticatedSession{
 		User: domain.User{ID: "user-1"}, HasPassword: true,
 	}})
-	request := httptest.NewRequest(http.MethodPut, "/api/me/notifications", strings.NewReader(`{"emailAlerts":false,"telegramChatId":"-123456"}`))
+	request := httptest.NewRequest(http.MethodPut, "/api/me/notifications", strings.NewReader(`{"emailAlerts":false,"emailDestination":"ops@example.com","telegramChatId":"-123456","telegramDisabled":true}`))
 	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
 	response := httptest.NewRecorder()
 	handler.UpdateNotifications(response, request)
@@ -85,7 +85,7 @@ func TestUpdateNotificationsHandlerReturnsUpdatedUser(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &user); err != nil {
 		t.Fatal(err)
 	}
-	if user.ID != "user-1" || user.HasPassword != true || user.Notify != (NotifyDTO{EmailAlerts: false, TelegramChatID: "-123456"}) {
+	if user.ID != "user-1" || user.HasPassword != true || user.Notify != (NotifyDTO{EmailAlerts: false, EmailDestination: "ops@example.com", TelegramChatID: "-123456", TelegramDisabled: true}) {
 		t.Fatalf("unexpected updated user DTO: %+v", user)
 	}
 	if strings.Contains(response.Body.String(), "private-hash") {

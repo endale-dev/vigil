@@ -50,17 +50,21 @@ func (account *AccountService) UpdateProfile(ctx context.Context, userID domain.
 }
 
 func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings) (*domain.User, error) {
+	notify.EmailDestination = strings.TrimSpace(notify.EmailDestination)
+	if notify.EmailDestination != "" && domain.ValidateEmail(notify.EmailDestination) != nil {
+		return nil, apperrors.ValidationError{Field: "emailDestination", Message: "Enter a valid email address."}
+	}
+	user, err := account.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	if notify.TelegramChatID != "" {
-		if !account.telegramEnabled {
+		if !account.telegramEnabled && notify.TelegramChatID != user.Notify.TelegramChatID {
 			return nil, apperrors.ErrProviderDisabled
 		}
 		if !validTelegramChatID(notify.TelegramChatID) {
 			return nil, apperrors.ValidationError{Field: "telegramChatId", Message: "must be empty or a 5 to 20 digit chat ID"}
 		}
-	}
-	user, err := account.users.GetByID(ctx, userID)
-	if err != nil {
-		return nil, err
 	}
 	user.Notify = notify
 	if err := account.users.Update(ctx, user); err != nil {

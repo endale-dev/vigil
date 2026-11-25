@@ -1,28 +1,20 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Globe } from '@lucide/vue'
 import { ApiError } from '../api/client'
 import { getPublicStatus } from '../api/status'
 import type { PublicCheckDTO, UptimeSummaryDTO } from '../api/types'
 import GuestShell from '../components/GuestShell.vue'
 import StatusBadge from '../components/StatusBadge.vue'
-import WorkspaceShell from '../components/WorkspaceShell.vue'
 import { usePolling } from '../composables/usePolling'
-import { useSession } from '../composables/useSession'
 
 const route = useRoute()
-const session = useSession()
-const layoutComponent = computed(() => session.isReady.value && session.user.value ? WorkspaceShell : GuestShell)
-const layoutProps = computed(() => layoutComponent.value === GuestShell
-  ? { headerLinkLabel: 'Sign in', headerLinkTo: { name: 'login' } }
-  : {})
 const slug = computed(() => typeof route.params.slug === 'string' ? route.params.slug : '')
 const { data, error, isLoading, refresh } = usePolling(() => getPublicStatus(slug.value), 30_000)
 const loadError = computed(() => {
   if (!error.value) return ''
-  if (error.value instanceof ApiError && error.value.status === 404) return 'This status page could not be found.'
-  return error.value instanceof Error ? error.value.message : 'Could not load this status page.'
+  if (error.value instanceof ApiError && error.value.status === 404) return 'This public page could not be found.'
+  return error.value instanceof Error ? error.value.message : 'Could not load this public page.'
 })
 const monitorCounts = computed(() => {
   const monitors = data.value?.monitors ?? []
@@ -51,9 +43,7 @@ const latestCheckLabel = computed(() => latestCheckAt.value
   ? `Last check ${formatDate(latestCheckAt.value.toISOString())}`
   : 'Waiting for the first check')
 const overallSummary = computed(() => {
-  if (!data.value || monitorCounts.value.total === 0) {
-    return { title: 'This page is ready', detail: 'Shared service health will appear here.' }
-  }
+  if (!data.value) return { title: '', detail: '' }
   if (data.value.status === 'operational') {
     return { title: 'All systems operational', detail: `${monitorCounts.value.up} of ${monitorCounts.value.total} services are responding normally.` }
   }
@@ -82,28 +72,23 @@ function checkLabel(check: PublicCheckDTO): string {
 </script>
 
 <template>
-  <component :is="layoutComponent" v-bind="layoutProps">
-    <div v-if="!data && isLoading" class="border-y border-vigil-rule py-8 text-sm text-vigil-muted" role="status">Loading status page…</div>
+  <GuestShell header-link-label="Sign in" :header-link-to="{ name: 'login' }">
+    <div v-if="!data && isLoading" class="border-y border-vigil-rule py-8 text-sm text-vigil-muted" role="status">Loading public page…</div>
 
     <section v-else-if="!data && loadError" class="border-y border-vigil-rule py-6">
       <p class="text-sm text-vigil-down" role="alert">{{ loadError }}</p>
       <button class="mt-4 min-h-10 rounded-md border border-vigil-rule px-3 py-2 text-sm hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2" type="button" @click="refresh">Try again</button>
     </section>
 
-    <div v-else-if="data" class="grid gap-0">
+    <div v-else-if="data" class="grid w-full gap-0">
       <header class="flex flex-wrap items-end justify-between gap-4 border-b border-vigil-rule pb-6">
         <div>
-          <p class="text-sm font-medium text-vigil-brand">Service status</p>
-          <h1 class="mt-2 text-3xl font-semibold tracking-tight text-vigil-ink">Status</h1>
-          <p class="mt-2 text-sm text-vigil-muted">Health across the services shared on this page.</p>
-        </div>
-        <div class="text-sm text-vigil-muted sm:text-right">
-          <p>Updates every 30 seconds</p>
-          <p class="mt-1 text-xs">{{ latestCheckLabel }}</p>
+          <h1 class="text-3xl font-semibold tracking-tight text-vigil-ink">Service status</h1>
+          <p class="mt-2 text-sm text-vigil-muted">Current availability and recent check results for shared services.</p>
         </div>
       </header>
 
-      <section class="flex flex-wrap items-center justify-between gap-4 border-b border-vigil-rule py-5" aria-labelledby="overall-status-title">
+      <section v-if="monitorCounts.total" class="flex flex-wrap items-center justify-between gap-4 border-b border-vigil-rule py-5" aria-labelledby="overall-status-title">
         <div class="flex min-w-0 items-start gap-3">
           <span
             class="mt-1.5 size-2.5 shrink-0 rounded-full"
@@ -115,10 +100,10 @@ function checkLabel(check: PublicCheckDTO): string {
             <p class="mt-1 text-sm text-vigil-muted">{{ overallSummary.detail }}</p>
           </div>
         </div>
-        <StatusBadge :status="data.status" />
+        <p class="text-xs text-vigil-muted">{{ latestCheckLabel }}</p>
       </section>
 
-      <section class="grid grid-cols-2 border-b border-vigil-rule sm:grid-cols-4" aria-label="Status summary">
+      <section v-if="monitorCounts.total" class="grid grid-cols-2 border-b border-vigil-rule sm:grid-cols-4" aria-label="Status summary">
         <div class="border-b border-vigil-rule py-4 pr-4 sm:border-b-0 sm:pr-6">
           <p class="text-sm text-vigil-muted">Services</p>
           <p class="mt-1 font-vigil-mono text-2xl tabular-nums">{{ monitorCounts.total }}</p>
@@ -132,19 +117,18 @@ function checkLabel(check: PublicCheckDTO): string {
           <p class="mt-1 font-vigil-mono text-2xl tabular-nums" :class="monitorCounts.down ? 'text-vigil-down' : 'text-vigil-ink'">{{ monitorCounts.down }}</p>
         </div>
         <div class="border-l border-vigil-rule py-4 pl-4 sm:pl-6">
-          <p class="text-sm text-vigil-muted">24h success</p>
+          <p class="text-sm text-vigil-muted">24-hour uptime</p>
           <p v-if="uptime24Hours !== null" class="mt-1 font-vigil-mono text-2xl tabular-nums">{{ `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
           <p v-else class="mt-2 text-sm font-medium text-vigil-muted">Awaiting checks</p>
         </div>
       </section>
 
-      <section class="pt-8" aria-labelledby="public-monitors-title">
+      <section v-if="monitorCounts.total" class="pt-8" aria-labelledby="public-monitors-title">
         <div class="flex items-baseline justify-between gap-4 border-b border-vigil-rule pb-3">
-          <h2 id="public-monitors-title" class="text-lg font-semibold tracking-tight">Public monitors</h2>
-          <span class="text-xs text-vigil-muted">Most recent check shown</span>
+          <h2 id="public-monitors-title" class="text-lg font-semibold tracking-tight">Shared services</h2>
         </div>
 
-        <ul v-if="data.monitors.length" aria-label="Public monitors">
+        <ul aria-labelledby="public-monitors-title">
           <li v-for="(monitor, monitorIndex) in data.monitors" :key="`${monitor.name}-${monitorIndex}`" class="border-b border-vigil-rule py-5">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -190,17 +174,11 @@ function checkLabel(check: PublicCheckDTO): string {
           </li>
         </ul>
 
-        <div v-else class="flex items-start gap-4 border-b border-vigil-rule py-7">
-          <span class="grid size-10 shrink-0 place-items-center rounded-md bg-vigil-brand-soft text-vigil-brand" aria-hidden="true">
-            <Globe :size="18" :stroke-width="1.8" />
-          </span>
-          <div>
-            <h3 class="text-sm font-semibold text-vigil-ink">No public monitors yet</h3>
-            <p class="mt-1 text-sm text-vigil-muted">Mark a monitor as public to share its service health here.</p>
-          </div>
-        </div>
+      </section>
+      <section v-else class="border-b border-vigil-rule py-10 text-center" aria-labelledby="no-shared-services-title">
+        <h2 id="no-shared-services-title" class="font-semibold text-vigil-ink">No services shared yet</h2>
       </section>
       <p v-if="error" class="text-sm text-vigil-warn" role="status">Refresh failed. Showing the last loaded status.</p>
     </div>
-  </component>
+  </GuestShell>
 </template>

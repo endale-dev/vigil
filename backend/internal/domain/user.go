@@ -12,8 +12,10 @@ const (
 )
 
 type NotifySettings struct {
-	EmailAlerts    bool
-	TelegramChatID string
+	EmailAlerts      bool
+	EmailDestination string
+	TelegramChatID   string
+	TelegramDisabled bool
 }
 
 type User struct {

@@ -37,7 +37,7 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	return load(os.LookupEnv)
+	return loadWithEnvFile(".env", os.LookupEnv)
 }
 
 func load(lookup func(string) (string, bool)) (Config, error) {

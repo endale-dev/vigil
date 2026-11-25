@@ -31,7 +31,7 @@ const title = computed(() => route.meta.title ?? 'Vigil')
               class="focus-visible:outline-2 focus-visible:outline-offset-4"
               :to="{ name: 'public-status', params: { slug: user.statusSlug } }"
             >
-              Public status
+              Status page
             </RouterLink>
           </template>
           <template v-else>

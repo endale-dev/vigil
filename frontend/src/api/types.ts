@@ -40,7 +40,9 @@ export interface CapabilitiesDTO {
 
 export interface NotifyDTO {
   emailAlerts: boolean
+  emailDestination: string
   telegramChatId: string
+  telegramDisabled: boolean
 }
 
 export interface UserDTO {

@@ -22,8 +22,10 @@ type userDocument struct {
 }
 
 type notifyDocument struct {
-	EmailAlerts    bool   `bson:"emailAlerts"`
-	TelegramChatID string `bson:"telegramChatId"`
+	EmailAlerts      bool   `bson:"emailAlerts"`
+	EmailDestination string `bson:"emailDestination,omitempty"`
+	TelegramChatID   string `bson:"telegramChatId"`
+	TelegramDisabled bool   `bson:"telegramDisabled,omitempty"`
 }
 
 type userRepository struct {
@@ -133,8 +135,10 @@ func userToDocument(user *domain.User) (*userDocument, error) {
 		GoogleSub:    user.GoogleSub,
 		StatusSlug:   user.StatusSlug,
 		Notify: notifyDocument{
-			EmailAlerts:    user.Notify.EmailAlerts,
-			TelegramChatID: user.Notify.TelegramChatID,
+			EmailAlerts:      user.Notify.EmailAlerts,
+			EmailDestination: user.Notify.EmailDestination,
+			TelegramChatID:   user.Notify.TelegramChatID,
+			TelegramDisabled: user.Notify.TelegramDisabled,
 		},
 		CreatedAt: user.CreatedAt,
 	}, nil
@@ -149,8 +153,10 @@ func (document *userDocument) toDomain() *domain.User {
 		GoogleSub:    document.GoogleSub,
 		StatusSlug:   document.StatusSlug,
 		Notify: domain.NotifySettings{
-			EmailAlerts:    document.Notify.EmailAlerts,
-			TelegramChatID: document.Notify.TelegramChatID,
+			EmailAlerts:      document.Notify.EmailAlerts,
+			EmailDestination: document.Notify.EmailDestination,
+			TelegramChatID:   document.Notify.TelegramChatID,
+			TelegramDisabled: document.Notify.TelegramDisabled,
 		},
 		CreatedAt: document.CreatedAt,
 	}

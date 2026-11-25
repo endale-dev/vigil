@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CircleCheck, CircleHelp, CircleX, TriangleAlert } from '@lucide/vue'
+import { CircleCheck, CircleHelp, CircleX, Pause, TriangleAlert } from '@lucide/vue'
 import type { MonitorStatus, OverallStatus } from '../api/types'
 
 const props = defineProps<{
-  status: MonitorStatus | OverallStatus
+  status: MonitorStatus | OverallStatus | 'paused'
+  plain?: boolean
 }>()
 
 const presentation = computed(() => {
   switch (props.status) {
+    case 'paused':
+      return { label: 'Paused', icon: Pause, classes: 'text-vigil-muted' }
     case 'up':
       return { label: 'Up', icon: CircleCheck, classes: 'border-vigil-up/25 bg-vigil-up-soft text-vigil-up' }
     case 'operational':
@@ -24,7 +27,8 @@ const presentation = computed(() => {
 </script>
 
 <template>
-  <span
+  <span v-if="plain" class="monitor-state" :data-state="status" role="status">{{ presentation.label }}</span>
+  <span v-else
     class="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold"
     :class="presentation.classes"
     role="status"

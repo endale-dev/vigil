@@ -24,8 +24,10 @@ type ErrorDTO struct {
 }
 
 type NotifyDTO struct {
-	EmailAlerts    bool   `json:"emailAlerts"`
-	TelegramChatID string `json:"telegramChatId"`
+	EmailAlerts      bool   `json:"emailAlerts"`
+	EmailDestination string `json:"emailDestination"`
+	TelegramChatID   string `json:"telegramChatId"`
+	TelegramDisabled bool   `json:"telegramDisabled"`
 }
 
 type CapabilitiesDTO struct {
@@ -109,8 +111,11 @@ func userDTO(user domain.User, hasPassword, googleEnabled, telegramEnabled bool)
 	return UserDTO{
 		ID: string(user.ID), Name: user.Name, Email: user.Email,
 		HasPassword: hasPassword, GoogleLinked: user.GoogleSub != "",
-		StatusSlug:   user.StatusSlug,
-		Notify:       NotifyDTO{EmailAlerts: user.Notify.EmailAlerts, TelegramChatID: user.Notify.TelegramChatID},
+		StatusSlug: user.StatusSlug,
+		Notify: NotifyDTO{
+			EmailAlerts: user.Notify.EmailAlerts, EmailDestination: user.Notify.EmailDestination,
+			TelegramChatID: user.Notify.TelegramChatID, TelegramDisabled: user.Notify.TelegramDisabled,
+		},
 		Capabilities: CapabilitiesDTO{Google: googleEnabled, Telegram: telegramEnabled},
 	}
 }

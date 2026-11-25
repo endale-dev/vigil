@@ -1,132 +1,56 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { RouterLink } from 'vue-router'
-import { Gauge, Globe, PanelLeftClose, PanelLeftOpen, Settings, UserRound } from '@lucide/vue'
-import { useSession } from '../composables/useSession'
+import '../console.css'
+import { ref } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+import { Bell, Globe, LayoutDashboard, PanelLeftClose, PanelLeftOpen } from '@lucide/vue'
+import AccountMenu from './AccountMenu.vue'
+import VigilBrand from './VigilBrand.vue'
 
-const { user } = useSession()
-const sidebarStorageKey = 'vigil.sidebar.collapsed'
-const isSidebarCollapsed = ref(localStorage.getItem(sidebarStorageKey) === 'true')
-const navigation = computed(() => [
-  { label: 'Overview', to: { name: 'dashboard' }, icon: Gauge },
-  ...(user.value?.statusSlug
-    ? [{ label: 'My status', to: { name: 'public-status', params: { slug: user.value.statusSlug } }, icon: Globe }]
-    : []),
-  { label: 'Settings', to: { name: 'settings' }, icon: Settings },
-])
-const mobileNavigation = computed(() => [...navigation.value, { label: 'Profile', to: { name: 'profile' }, icon: UserRound }])
-const initials = computed(() => user.value?.name
-  .split(/\s+/)
-  .filter(Boolean)
-  .slice(0, 2)
-  .map((part) => part[0]?.toUpperCase())
-  .join('') || 'V')
-
-const mainLayoutClass = computed(() => isSidebarCollapsed.value
-  ? 'md:ml-[72px] md:w-[calc(100%-72px)]'
-  : 'md:ml-36 md:w-[calc(100%-9rem)] lg:ml-56 lg:w-[calc(100%-14rem)]')
+const route = useRoute()
+const storageKey = 'vigil.sidebar.collapsed'
+const collapsed = ref(localStorage.getItem(storageKey) === 'true')
+const navigation = [
+  { label: 'Overview', to: { name: 'dashboard' }, icon: LayoutDashboard },
+  { label: 'Alerts', to: { name: 'alerts' }, icon: Bell },
+  { label: 'Status page', mobileLabel: 'Status page', to: { name: 'status-manager' }, icon: Globe },
+]
 
 function toggleSidebar(): void {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-  localStorage.setItem(sidebarStorageKey, String(isSidebarCollapsed.value))
+  collapsed.value = !collapsed.value
+  localStorage.setItem(storageKey, String(collapsed.value))
 }
 </script>
 
 <template>
-  <div class="min-h-screen bg-vigil-paper font-vigil-sans text-vigil-ink antialiased">
-    <aside
-      id="workspace-sidebar"
-      class="fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-vigil-rule bg-vigil-rail md:flex"
-      :class="isSidebarCollapsed ? 'md:w-[72px]' : 'w-36 lg:w-56'"
-    >
-      <div
-        class="flex items-center gap-2"
-        :class="isSidebarCollapsed ? 'h-20 flex-col justify-center px-2' : 'h-16 justify-between px-4 lg:px-6'"
-      >
-        <RouterLink
-          v-if="!isSidebarCollapsed"
-          class="rounded-sm text-lg font-semibold tracking-[-0.065em] text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          :to="{ name: 'dashboard' }"
-          aria-label="Vigil overview"
-        >
-          vigil<span class="text-vigil-brand">.</span>
+  <div class="workspace console-theme" :class="{ 'rail-collapsed': collapsed }">
+    <a class="skip-content" href="#workspace-main">Skip to content</a>
+    <aside id="workspace-sidebar" class="workspace-rail">
+      <div class="rail-head">
+        <RouterLink class="rail-brand" :to="{ name: 'dashboard' }" aria-label="Vigil overview">
+          <VigilBrand :compact="collapsed" />
         </RouterLink>
-        <RouterLink
-          v-else
-          class="rounded-sm text-base font-semibold tracking-[-0.065em] text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          :to="{ name: 'dashboard' }"
-          aria-label="Vigil overview"
-          title="Vigil"
-        >
-          v<span class="text-vigil-brand">.</span>
-        </RouterLink>
-        <button
-          class="grid size-10 shrink-0 place-items-center rounded-md text-vigil-muted transition-colors hover:bg-vigil-paper hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          type="button"
-          :aria-label="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          :title="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          :aria-pressed="isSidebarCollapsed"
-          aria-controls="workspace-sidebar"
-          @click="toggleSidebar"
-        >
-          <component :is="isSidebarCollapsed ? PanelLeftOpen : PanelLeftClose" :size="18" :stroke-width="1.8" aria-hidden="true" />
+        <button class="icon-control" type="button" :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+          :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'" :aria-expanded="!collapsed" aria-controls="workspace-sidebar" @click="toggleSidebar">
+          <component :is="collapsed ? PanelLeftOpen : PanelLeftClose" :size="16" aria-hidden="true" />
         </button>
       </div>
-
-      <nav class="mt-8 grid gap-1 px-3 lg:px-4" aria-label="Workspace navigation">
-        <RouterLink
-          v-for="item in navigation"
-          :key="item.label"
-          :to="item.to"
-          :aria-label="item.label"
-          :title="item.label"
-          class="relative flex min-h-11 items-center gap-3 rounded-md text-sm font-medium text-vigil-muted transition-colors hover:bg-vigil-paper hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          :class="isSidebarCollapsed ? 'justify-center px-2' : 'px-3'"
-          active-class="!bg-vigil-brand-soft !text-vigil-brand before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-vigil-brand"
-        >
-          <component :is="item.icon" :size="18" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
-          <span v-if="!isSidebarCollapsed">{{ item.label }}</span>
+      <nav aria-label="Workspace navigation" class="rail-nav">
+        <RouterLink v-for="item in navigation" :key="item.label" :to="item.to" :title="collapsed ? item.label : undefined"
+          :aria-label="item.label" class="rail-link" active-class="selected" :class="{ selected: item.to.name === 'dashboard' && route.name === 'monitor-detail' }">
+          <component :is="item.icon" :size="18" aria-hidden="true" /><span v-if="!collapsed">{{ item.label }}</span>
         </RouterLink>
       </nav>
-
-      <div class="mt-auto border-t border-vigil-rule p-3" :class="isSidebarCollapsed ? '' : 'lg:p-4'">
-        <div class="flex justify-center" :class="isSidebarCollapsed ? '' : 'lg:justify-start'">
-          <RouterLink class="flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :class="isSidebarCollapsed ? 'size-9 justify-center' : 'w-full'" :to="{ name: 'profile' }" :aria-label="`Profile for ${user?.name ?? 'Vigil user'}`" :title="isSidebarCollapsed ? `${user?.name ?? 'Vigil user'} · Profile` : undefined" active-class="!text-vigil-brand">
-            <span class="grid size-9 shrink-0 place-items-center rounded-full border border-vigil-brand/30 bg-vigil-brand-soft text-xs font-semibold text-vigil-brand" aria-hidden="true">
-              {{ initials }}
-            </span>
-            <div v-if="!isSidebarCollapsed" class="hidden min-w-0 flex-1 lg:block">
-              <p class="truncate text-sm font-medium text-vigil-ink">{{ user?.name ?? 'Vigil user' }}</p>
-              <p class="truncate text-xs text-vigil-muted">{{ user?.email ?? '' }}</p>
-            </div>
-          </RouterLink>
-        </div>
-      </div>
+      <AccountMenu variant="rail" :compact="collapsed" />
     </aside>
-
-    <main class="min-h-screen w-full" :class="mainLayoutClass">
-      <div class="mx-auto min-h-screen w-full max-w-[1120px] px-5 pb-[calc(80px_+_env(safe-area-inset-bottom))] pt-7 sm:px-7 sm:pt-10 md:pb-12">
-        <slot />
-      </div>
-    </main>
-
-    <nav
-      class="fixed inset-x-0 bottom-0 z-40 border-t border-vigil-rule bg-vigil-surface px-3 pt-1.5 md:hidden"
-      aria-label="Primary navigation"
-      style="height: calc(64px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom)"
-    >
-      <div class="mx-auto grid h-14 max-w-md gap-1" :style="{ gridTemplateColumns: `repeat(${mobileNavigation.length}, minmax(0, 1fr))` }">
-        <RouterLink
-          v-for="item in mobileNavigation"
-          :key="item.label"
-          :to="item.to"
-          class="relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-md px-1 text-[11px] font-medium text-vigil-muted transition-colors hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-vigil-brand"
-          active-class="!bg-vigil-brand-soft !font-semibold !text-vigil-brand before:absolute before:inset-x-5 before:top-0 before:h-0.5 before:bg-vigil-brand"
-        >
-          <component :is="item.icon" :size="18" :stroke-width="1.8" aria-hidden="true" />
-          <span>{{ item.label }}</span>
-        </RouterLink>
-      </div>
+    <div class="workspace-body">
+      <main id="workspace-main" class="workspace-main" tabindex="-1"><slot /></main>
+    </div>
+    <nav class="mobile-nav" aria-label="Primary navigation">
+      <RouterLink v-for="item in navigation" :key="item.label" :to="item.to" active-class="selected"
+        :class="{ selected: item.to.name === 'dashboard' && route.name === 'monitor-detail' }">
+        <component :is="item.icon" :size="19" aria-hidden="true" />{{ item.mobileLabel ?? item.label }}
+      </RouterLink>
+      <AccountMenu variant="mobile" />
     </nav>
   </div>
 </template>

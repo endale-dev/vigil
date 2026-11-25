@@ -37,8 +37,12 @@ func (notifier *EmailNotifier) Notify(ctx context.Context, user domain.User, ale
 	default:
 		return nil
 	}
+	destination := user.Notify.EmailDestination
+	if destination == "" {
+		destination = user.Email
+	}
 	return notifier.mailer.Send(ctx, service.Mail{
-		To:      user.Email,
+		To:      destination,
 		Subject: subject,
 		Body:    fmt.Sprintf("%s\n%s", alert.Monitor.Target, alert.Detail),
 	})

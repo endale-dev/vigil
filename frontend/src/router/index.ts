@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import AccountSettingsView from '../views/AccountSettingsView.vue'
+import AlertsView from '../views/AlertsView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 import HomeView from '../views/HomeView.vue'
 import DashboardView from '../views/DashboardView.vue'
@@ -6,10 +8,9 @@ import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import LoginView from '../views/LoginView.vue'
 import MonitorDetailView from '../views/MonitorDetailView.vue'
 import PublicStatusView from '../views/PublicStatusView.vue'
-import ProfileView from '../views/ProfileView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
-import SettingsView from '../views/SettingsView.vue'
+import StatusManagerView from '../views/StatusManagerView.vue'
 import { useSession } from '../composables/useSession'
 
 declare module 'vue-router' {
@@ -31,9 +32,14 @@ const router = createRouter({
     { path: '/reset-password', name: 'reset-password', component: ResetPasswordView, meta: { title: 'Choose a new password' } },
     { path: '/dashboard', name: 'dashboard', component: DashboardView, meta: { title: 'Dashboard', requiresAuth: true } },
     { path: '/monitors/:id', name: 'monitor-detail', component: MonitorDetailView, meta: { title: 'Monitor', requiresAuth: true } },
-    { path: '/settings', name: 'settings', component: SettingsView, meta: { title: 'Settings', requiresAuth: true } },
-    { path: '/profile', name: 'profile', component: ProfileView, meta: { title: 'Profile', requiresAuth: true } },
-    { path: '/status/:slug', name: 'public-status', component: PublicStatusView, meta: { title: 'Public status' } },
+    { path: '/alerts', name: 'alerts', component: AlertsView, meta: { title: 'Alerts', requiresAuth: true } },
+    { path: '/status-page', name: 'status-manager', component: StatusManagerView, meta: { title: 'Status page', requiresAuth: true } },
+    { path: '/account', name: 'account-settings', component: AccountSettingsView, meta: { title: 'Account settings', requiresAuth: true } },
+    { path: '/settings', name: 'settings', redirect: (to) => to.query.tab === 'status'
+      ? { name: 'status-manager', query: {} }
+      : { name: 'account-settings' } },
+    { path: '/profile', redirect: { name: 'account-settings' } },
+    { path: '/status/:slug', name: 'public-status', component: PublicStatusView, meta: { title: 'Status page' } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
   ],
 })
@@ -54,6 +60,12 @@ router.beforeEach(async (to) => {
     return { name: 'dashboard' }
   }
   return true
+})
+
+router.afterEach((to) => {
+  document.title = (to.meta.requiresAuth || to.meta.guestOnly) && to.meta.title
+    ? `${to.meta.title} · Vigil`
+    : 'Vigil'
 })
 
 export { router }

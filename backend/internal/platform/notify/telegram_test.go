@@ -87,6 +87,13 @@ func TestTelegramNotifierSkipsDisabledAndUnknownAlerts(t *testing.T) {
 	if err := notifier.Notify(context.Background(), domain.User{}, service.Alert{Status: domain.StatusDown}); err != nil {
 		t.Fatalf("disabled Notify() error = %v", err)
 	}
+	disabled := domain.User{Notify: domain.NotifySettings{TelegramChatID: "chat", TelegramDisabled: true}}
+	if notifier.Enabled(disabled) {
+		t.Fatal("notifier enabled with Telegram alerts turned off")
+	}
+	if err := notifier.Notify(context.Background(), disabled, service.Alert{Status: domain.StatusDown}); err != nil {
+		t.Fatalf("disabled chat Notify() error = %v", err)
+	}
 	user := domain.User{Notify: domain.NotifySettings{TelegramChatID: "chat"}}
 	if err := notifier.Notify(context.Background(), user, service.Alert{Status: domain.StatusUnknown}); err != nil {
 		t.Fatalf("unknown alert Notify() error = %v", err)

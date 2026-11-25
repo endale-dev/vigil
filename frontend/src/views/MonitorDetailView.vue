@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { ArrowLeft } from '@lucide/vue'
+import { ArrowLeft, Trash2, X } from '@lucide/vue'
+import { checkIntervalLabel } from '../format'
 import { ApiError } from '../api/client'
 import {
   deleteMonitor,
@@ -31,6 +32,7 @@ const actionError = ref('')
 const editError = ref('')
 const fieldErrors = ref<Record<string, string | undefined>>({})
 const editDialog = ref<HTMLDialogElement | null>(null)
+const formVersion = ref(0)
 const deleteOpen = ref(false)
 const pending = ref(false)
 
@@ -80,9 +82,11 @@ function typeLabel(type: MonitorDetailDTO['type']): string {
   return type === 'tls' ? 'TLS certificate' : type.toUpperCase()
 }
 
-function openEdit(): void {
+async function openEdit(): Promise<void> {
+  formVersion.value++
   editError.value = ''
   fieldErrors.value = {}
+  await nextTick()
   editDialog.value?.showModal()
 }
 
@@ -157,143 +161,69 @@ async function confirmDelete(): Promise<void> {
       </RouterLink>
     </section>
 
-    <section v-else-if="monitor" class="pt-4">
-      <RouterLink class="mb-5 inline-flex min-h-9 items-center gap-2 text-sm font-medium text-vigil-muted hover:text-vigil-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :to="{ name: 'dashboard' }">
-        <ArrowLeft :size="16" aria-hidden="true" />
-        Overview
-      </RouterLink>
-      <p v-if="actionError" class="mb-5 rounded-md border border-vigil-down/30 bg-vigil-down-soft p-3 text-sm text-vigil-down" role="alert">
-        {{ actionError }}
-      </p>
-
-      <div class="flex flex-wrap items-start justify-between gap-4 border-b border-vigil-rule pb-6">
+    <section v-else-if="monitor">
+      <RouterLink class="detail-back" :to="{ name: 'dashboard' }"><ArrowLeft :size="15" /> All monitors</RouterLink>
+      <p v-if="actionError" class="console-notice danger" role="alert">{{ actionError }}</p>
+      <header class="console-page-head detail-head">
         <div class="min-w-0">
-          <div class="flex flex-wrap items-center gap-3">
-            <h1 class="text-2xl font-semibold">{{ monitor.name }}</h1>
-            <StatusBadge :status="monitor.status" />
-            <span v-if="!monitor.enabled" class="rounded border border-vigil-rule px-2 py-1 text-xs text-vigil-muted">Paused</span>
+          <div class="flex flex-wrap items-center gap-3"><h1 class="console-title">{{ monitor.name }}</h1>
+            <StatusBadge plain :status="monitor.enabled ? monitor.status : 'paused'" />
           </div>
-          <p class="mt-2 break-all text-sm text-vigil-muted">{{ monitor.target }}</p>
+          <p class="console-description break-all">{{ monitor.target }}</p>
         </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            class="min-h-10 rounded-md border border-vigil-rule px-3 py-2 text-sm hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
-            type="button"
-            :disabled="pending"
-            @click="openEdit"
-          >
-            Edit
-          </button>
-          <button
-            class="min-h-10 rounded-md border border-vigil-rule px-3 py-2 text-sm hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
-            type="button"
-            :disabled="pending"
-            @click="toggleMonitor"
-          >
-            {{ pending ? 'Saving…' : monitor.enabled ? 'Pause' : 'Resume' }}
-          </button>
-          <button
-            class="min-h-10 rounded-md border border-vigil-down/30 px-3 py-2 text-sm text-vigil-down hover:bg-vigil-down-soft focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
-            type="button"
-            :disabled="pending"
-            @click="deleteOpen = true"
-          >
-            Delete
-          </button>
+        <div class="detail-actions">
+          <button class="console-button primary" type="button" :disabled="pending" @click="openEdit">Edit monitor</button>
+          <button class="console-button secondary" type="button" :disabled="pending" @click="toggleMonitor">{{ pending ? 'Saving…' : monitor.enabled ? 'Pause' : 'Resume' }}</button>
+          <button class="icon-control destructive" type="button" aria-label="Delete monitor" title="Delete monitor" :disabled="pending" @click="deleteOpen = true"><Trash2 :size="16" /></button>
         </div>
-      </div>
-
-      <dl class="mt-6 grid gap-4 border-y border-vigil-rule py-4 text-sm sm:grid-cols-3">
-        <div>
-          <dt class="text-vigil-muted">Type</dt>
-          <dd class="mt-1">{{ typeLabel(monitor.type) }}</dd>
-        </div>
-        <div>
-          <dt class="text-vigil-muted">Check interval</dt>
-          <dd class="mt-1">Every {{ monitor.intervalSeconds }} seconds</dd>
-        </div>
-        <div>
-          <dt class="text-vigil-muted">Last check</dt>
-          <dd class="mt-1">{{ formatDate(monitor.lastCheckedAt) }}</dd>
-        </div>
+      </header>
+      <dl class="detail-metadata console-panel">
+        <div><dt>Monitor type</dt><dd>{{ typeLabel(monitor.type) }}</dd></div>
+        <div><dt>Check interval</dt><dd>{{ checkIntervalLabel(monitor.intervalSeconds) }}</dd></div>
+        <div><dt>Last check</dt><dd>{{ formatDate(monitor.lastCheckedAt) }}</dd></div>
       </dl>
-
-      <section class="mt-8" aria-labelledby="uptime-title">
-        <h3 id="uptime-title" class="text-lg font-semibold">Uptime</h3>
-        <p v-if="monitor.uptime.last24Hours.total === 0 && monitor.uptime.last7Days.total === 0 && monitor.uptime.last30Days.total === 0" class="mt-1 text-sm text-vigil-muted">Uptime begins when the first check completes.</p>
-        <dl class="mt-4 grid gap-4 sm:grid-cols-3">
+      <section class="console-panel detail-uptime" aria-labelledby="uptime-title">
+        <div class="panel-title"><h2 id="uptime-title">Uptime</h2></div>
+        <dl>
           <div v-for="period in [
-            { label: '24 hours', value: monitor.uptime.last24Hours },
-            { label: '7 days', value: monitor.uptime.last7Days },
-            { label: '30 days', value: monitor.uptime.last30Days },
-          ]" :key="period.label" class="border-t border-vigil-rule pt-4">
-            <dt class="text-sm text-vigil-muted">Last {{ period.label }}</dt>
-            <dd class="mt-2 text-2xl font-semibold">{{ uptimeLabel(period.value) }}</dd>
-            <dd v-if="period.value.total > 0" class="mt-1 text-xs text-vigil-muted">{{ period.value.up }} of {{ period.value.total }} checks up</dd>
+            { label: 'Last 24 hours', value: monitor.uptime.last24Hours },
+            { label: 'Last 7 days', value: monitor.uptime.last7Days },
+            { label: 'Last 30 days', value: monitor.uptime.last30Days },
+          ]" :key="period.label">
+            <dt>{{ period.label }}</dt><dd>{{ period.value.total ? uptimeLabel(period.value) : '—' }}</dd>
+            <dd class="uptime-caption">{{ period.value.total ? period.value.up + ' of ' + period.value.total + ' checks up' : 'Awaiting checks' }}</dd>
           </div>
         </dl>
       </section>
-
-      <section class="mt-8" aria-labelledby="checks-title">
-        <h3 id="checks-title" class="text-lg font-semibold">Recent checks</h3>
-        <div class="mt-3 border-t border-vigil-rule pt-4">
-          <UptimeStrip :checks="checks" />
-          <ul v-if="checks.length" class="mt-4 divide-y divide-vigil-rule">
-            <li v-for="check in checks" :key="check.id" class="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
-              <div>
-                <span class="font-medium">{{ check.up ? 'Up' : 'Down' }}</span>
-                <span class="ml-2 text-vigil-muted">{{ check.latencyMs }} ms</span>
-                <p v-if="check.detail" class="mt-1 text-xs text-vigil-muted">{{ check.detail }}</p>
-              </div>
-              <time class="text-xs text-vigil-muted" :datetime="check.checkedAt">{{ formatDate(check.checkedAt) }}</time>
+      <div class="detail-history">
+        <section class="console-panel history-card" aria-labelledby="checks-title">
+          <div class="panel-title"><h2 id="checks-title">Recent checks</h2></div>
+          <UptimeStrip v-if="checks.length || monitor.enabled" :checks="checks" />
+          <p v-else class="history-empty">Resume this monitor to collect checks.</p>
+          <ul v-if="checks.length" class="check-list">
+            <li v-for="check in checks" :key="check.id">
+              <div><span class="check-state" :class="{ failed: !check.up }">{{ check.up ? 'Up' : 'Down' }}</span> <span class="number">{{ check.latencyMs }} ms</span>
+                <p v-if="check.detail">{{ check.detail }}</p>
+              </div><time :datetime="check.checkedAt">{{ formatDate(check.checkedAt) }}</time>
             </li>
           </ul>
-        </div>
-      </section>
-
-      <section class="mt-8" aria-labelledby="incidents-title">
-        <h3 id="incidents-title" class="text-lg font-semibold">Incidents</h3>
-        <ul v-if="incidents.length" class="mt-3 divide-y divide-vigil-rule border-y border-vigil-rule px-0">
-          <li v-for="incident in incidents" :key="incident.id" class="py-4">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <p class="font-medium">{{ incident.cause }}</p>
-              <span v-if="!incident.resolvedAt" class="rounded border border-vigil-down/30 px-2 py-1 text-xs text-vigil-down">Ongoing</span>
-              <span v-else class="text-xs text-vigil-muted">Resolved {{ formatDate(incident.resolvedAt) }}</span>
-            </div>
-            <p class="mt-1 text-sm text-vigil-muted">Started {{ formatDate(incident.startedAt) }}</p>
-          </li>
-        </ul>
-        <p v-else class="mt-3 border-t border-vigil-rule pt-4 text-sm text-vigil-muted">No incidents recorded.</p>
-      </section>
+        </section>
+        <section class="console-panel history-card" aria-labelledby="incidents-title">
+          <div class="panel-title"><h2 id="incidents-title">Incidents</h2></div>
+          <ul v-if="incidents.length" class="incident-list">
+            <li v-for="incident in incidents" :key="incident.id"><strong>{{ incident.cause }}</strong>
+              <p>Started {{ formatDate(incident.startedAt) }}</p>
+              <p v-if="incident.resolvedAt">Resolved {{ formatDate(incident.resolvedAt) }}</p><p v-else class="text-vigil-down">Ongoing</p>
+            </li>
+          </ul><p v-else class="history-empty">No incidents recorded.</p>
+        </section>
+      </div>
     </section>
 
-    <dialog
-      ref="editDialog"
-      class="max-h-[90vh] w-[min(42rem,calc(100%-2rem))] overflow-y-auto rounded-lg border border-vigil-rule bg-vigil-surface p-6 text-vigil-ink shadow-xl backdrop:bg-vigil-ink/35"
-      aria-labelledby="edit-monitor-title"
-    >
-      <div class="mb-6 flex items-center justify-between gap-4">
-        <h2 id="edit-monitor-title" class="text-xl font-semibold">Edit monitor</h2>
-        <button
-          class="min-h-9 rounded-md border border-vigil-rule px-3 text-sm hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2"
-          type="button"
-          aria-label="Close monitor editor"
-          @click="editDialog?.close()"
-        >
-          Close
-        </button>
-      </div>
-      <p v-if="editError" class="mb-5 rounded-md border border-vigil-down/30 bg-vigil-down-soft p-3 text-sm text-vigil-down" role="alert">
-        {{ editError }}
-      </p>
-      <MonitorForm
-        v-if="monitor"
-        :initial-value="monitor"
-        :disabled="pending"
-        :field-errors="fieldErrors"
-        submit-label="Save changes"
-        @submit="saveEdit"
-      />
+    <dialog ref="editDialog" class="w-[min(38rem,calc(100%-2rem))] overflow-y-auto border border-vigil-rule bg-vigil-surface p-5 text-vigil-ink sm:p-6" aria-labelledby="edit-monitor-title">
+      <div class="dialog-head"><h2 id="edit-monitor-title">Edit monitor</h2><button type="button" class="icon-control" aria-label="Close monitor editor" @click="editDialog?.close()"><X :size="18" /></button></div>
+      <p v-if="editError" class="console-notice danger" role="alert">{{ editError }}</p>
+      <MonitorForm v-if="monitor" :key="formVersion" :initial-value="monitor" :disabled="pending" :field-errors="fieldErrors" submit-label="Save changes" @submit="saveEdit" />
     </dialog>
 
     <ConfirmDialog

@@ -29,12 +29,19 @@ func TestEmailNotifierSendsDownAndRecoveryMail(t *testing.T) {
 			t.Fatalf("sent mail = %+v, want recipient and subject %q", got, test.subject)
 		}
 	}
+	user.Notify.EmailDestination = "alerts@example.test"
+	if err := notifier.Notify(context.Background(), user, service.Alert{Monitor: monitor, Status: domain.StatusDown}); err != nil {
+		t.Fatal(err)
+	}
+	if got := mailer.messages[len(mailer.messages)-1].To; got != user.Notify.EmailDestination {
+		t.Fatalf("recipient = %q, want configured destination %q", got, user.Notify.EmailDestination)
+	}
 }
 
 func TestEmailNotifierSkipsDisabledAndUnknownAlerts(t *testing.T) {
 	mailer := &recordingMailer{}
 	notifier := NewEmailNotifier(mailer)
-	user := domain.User{Email: "owner@example.test"}
+	user := domain.User{Email: "owner@example.test", Notify: domain.NotifySettings{EmailDestination: "alerts@example.test"}}
 	if notifier.Enabled(user) {
 		t.Fatal("notifier enabled when email alerts are disabled")
 	}

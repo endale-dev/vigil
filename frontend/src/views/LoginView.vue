@@ -4,7 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError } from '../api/client'
 import { getCapabilities, startGoogleLogin } from '../api/auth'
 import FormField from '../components/FormField.vue'
-import GuestShell from '../components/GuestShell.vue'
+import AuthLayout from '../components/AuthLayout.vue'
 import { useSession } from '../composables/useSession'
 
 const route = useRoute()
@@ -65,10 +65,9 @@ async function submit(): Promise<void> {
 </script>
 
 <template>
-  <GuestShell header-link-label="Create account" :header-link-to="{ name: 'register' }">
-    <section class="w-full max-w-md border-y border-vigil-rule bg-vigil-surface px-5 py-8 sm:border sm:px-8" aria-labelledby="login-title">
-      <h1 id="login-title" class="mt-6 text-2xl font-semibold">Sign in</h1>
-      <p class="mt-2 text-sm text-vigil-muted">Keep an eye on the services that matter to you.</p>
+  <AuthLayout mode="login">
+    <section aria-labelledby="login-title">
+      <h1 id="login-title" class="console-title">Sign in</h1>
 
       <p v-if="googleError" class="mt-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         Google sign-in did not work. Please try again or use your email and password.
@@ -84,7 +83,8 @@ async function submit(): Promise<void> {
         <FormField
           id="login-email"
           v-model="email"
-          label="Email"
+          label="Email address"
+          placeholder="you@example.com"
           type="email"
           autocomplete="email"
           :disabled="submitting"
@@ -96,18 +96,18 @@ async function submit(): Promise<void> {
           v-model="password"
           label="Password"
           type="password"
+          revealable
           autocomplete="current-password"
           :disabled="submitting"
           :error="passwordError"
           required
-        />
-        <div class="flex justify-end text-sm">
-          <RouterLink class="text-vigil-brand underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4" :to="{ name: 'forgot-password' }">
-            Forgot password?
-          </RouterLink>
-        </div>
+        >
+          <template #label-action>
+            <RouterLink class="entry-recovery" :to="{ name: 'forgot-password' }">Forgot password?</RouterLink>
+          </template>
+        </FormField>
         <button
-          class="min-h-11 rounded-md bg-vigil-brand px-4 py-2 font-medium text-white hover:bg-vigil-brand-hover focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
+          class="console-button primary entry-submit"
           type="submit"
           :disabled="submitting"
         >
@@ -131,5 +131,5 @@ async function submit(): Promise<void> {
       </template>
 
     </section>
-  </GuestShell>
+  </AuthLayout>
 </template>

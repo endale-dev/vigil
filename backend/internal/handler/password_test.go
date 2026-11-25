@@ -77,3 +77,21 @@ func TestChangePasswordHandlerRequiresSession(t *testing.T) {
 		t.Fatalf("change-password status/auth/change calls = %d/%d/%d", response.Code, serviceStub.authCalls, serviceStub.changeCalls)
 	}
 }
+
+func TestChangePasswordHandlerReportsIncorrectCurrentPasswordAsFieldError(t *testing.T) {
+	serviceStub := &authenticationStub{
+		authResult: service.AuthenticatedSession{
+			User: domain.User{ID: "user-1"}, Session: domain.Session{ID: "session-1"},
+		},
+		changeError: apperrors.ErrInvalidCredentials,
+	}
+	handler := newAuthenticationHandlerForTest(t, serviceStub, false)
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/password/change", strings.NewReader(`{"currentPassword":"wrong","newPassword":"replacement-password"}`))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.ChangePassword(response, request)
+
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), `"field":"currentPassword"`) {
+		t.Fatalf("change-password status/body = %d/%q", response.Code, response.Body.String())
+	}
+}
