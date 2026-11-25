@@ -10,7 +10,7 @@ const isSidebarCollapsed = ref(localStorage.getItem(sidebarStorageKey) === 'true
 const navigation = computed(() => [
   { label: 'Overview', to: { name: 'dashboard' }, icon: Gauge },
   ...(user.value?.statusSlug
-    ? [{ label: 'Status', to: { name: 'public-status', params: { slug: user.value.statusSlug } }, icon: Globe }]
+    ? [{ label: 'My status', to: { name: 'public-status', params: { slug: user.value.statusSlug } }, icon: Globe }]
     : []),
   { label: 'Settings', to: { name: 'settings' }, icon: Settings },
 ])
@@ -38,7 +38,10 @@ function toggleSidebar(): void {
       class="fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-vigil-rule bg-vigil-rail md:flex"
       :class="isSidebarCollapsed ? 'md:w-[72px]' : 'w-36 lg:w-56'"
     >
-      <div class="flex h-16 items-center justify-between gap-2" :class="isSidebarCollapsed ? 'justify-center px-2' : 'px-5 lg:px-6'">
+      <div
+        class="flex items-center gap-2"
+        :class="isSidebarCollapsed ? 'h-20 flex-col justify-center px-2' : 'h-16 justify-between px-4 lg:px-6'"
+      >
         <RouterLink
           v-if="!isSidebarCollapsed"
           class="rounded-sm text-lg font-semibold tracking-[-0.065em] text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
@@ -47,12 +50,21 @@ function toggleSidebar(): void {
         >
           vigil<span class="text-vigil-brand">.</span>
         </RouterLink>
+        <RouterLink
+          v-else
+          class="rounded-sm text-base font-semibold tracking-[-0.065em] text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
+          :to="{ name: 'dashboard' }"
+          aria-label="Vigil overview"
+          title="Vigil"
+        >
+          v<span class="text-vigil-brand">.</span>
+        </RouterLink>
         <button
-          class="grid size-8 shrink-0 place-items-center rounded-md text-vigil-muted transition-colors hover:bg-vigil-paper hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
+          class="grid size-10 shrink-0 place-items-center rounded-md text-vigil-muted transition-colors hover:bg-vigil-paper hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
           type="button"
           :aria-label="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
           :title="isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-          :aria-expanded="!isSidebarCollapsed"
+          :aria-pressed="isSidebarCollapsed"
           aria-controls="workspace-sidebar"
           @click="toggleSidebar"
         >
