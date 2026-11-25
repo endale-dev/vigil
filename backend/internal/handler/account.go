@@ -15,6 +15,7 @@ type sessionAuthenticator interface {
 }
 
 type accountService interface {
+	UpdateProfile(context.Context, domain.ID, string) (*domain.User, error)
 	UpdateNotifications(context.Context, domain.ID, domain.NotifySettings) (*domain.User, error)
 	UpdateStatusSlug(context.Context, domain.ID, string) (*domain.User, error)
 	SendTestAlert(context.Context, domain.ID, domain.Channel) error
@@ -29,6 +30,10 @@ type AccountHandler struct {
 
 type statusSlugRequest struct {
 	StatusSlug string `json:"statusSlug"`
+}
+
+type profileRequest struct {
+	Name string `json:"name"`
 }
 
 func NewAccountHandler(authentication sessionAuthenticator, account accountService, capabilities CapabilitiesDTO, logger *slog.Logger) (*AccountHandler, error) {
@@ -51,6 +56,24 @@ func (handler *AccountHandler) UpdateNotifications(writer http.ResponseWriter, r
 	user, err := handler.account.UpdateNotifications(request.Context(), session.User.ID, domain.NotifySettings{
 		EmailAlerts: input.EmailAlerts, TelegramChatID: input.TelegramChatID,
 	})
+	if err != nil {
+		handler.writeError(writer, err)
+		return
+	}
+	handler.writeJSON(writer, http.StatusOK, userDTO(*user, session.HasPassword, handler.capabilities.Google, handler.capabilities.Telegram))
+}
+
+func (handler *AccountHandler) UpdateProfile(writer http.ResponseWriter, request *http.Request) {
+	session, ok := handler.currentSession(writer, request)
+	if !ok {
+		return
+	}
+	var input profileRequest
+	if err := decodeJSON(writer, request, &input); err != nil {
+		handler.writeError(writer, err)
+		return
+	}
+	user, err := handler.account.UpdateProfile(request.Context(), session.User.ID, input.Name)
 	if err != nil {
 		handler.writeError(writer, err)
 		return

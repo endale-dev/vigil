@@ -8,6 +8,13 @@ export function updateNotifications(input: NotifyDTO): Promise<UserDTO> {
   }, { authenticated: true })
 }
 
+export function updateProfile(name: string): Promise<UserDTO> {
+  return apiRequest<UserDTO>('/api/me/profile', {
+    method: 'PUT',
+    body: JSON.stringify({ name }),
+  }, { authenticated: true })
+}
+
 export function updateStatusSlug(statusSlug: string): Promise<UserDTO> {
   return apiRequest<UserDTO>('/api/me/status-slug', {
     method: 'PUT',

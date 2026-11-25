@@ -50,6 +50,9 @@ func (recorder authenticationRecorder) Me(w http.ResponseWriter, _ *http.Request
 
 type accountRecorder struct{ *routeRecorder }
 
+func (recorder accountRecorder) UpdateProfile(w http.ResponseWriter, _ *http.Request) {
+	recorder.respond("update_profile", w)
+}
 func (recorder accountRecorder) UpdateNotifications(w http.ResponseWriter, _ *http.Request) {
 	recorder.respond("update_notifications", w)
 }
@@ -138,6 +141,7 @@ func TestNewRegistersEveryAPIEndpointOnceAndProtectsOnlyRequiredRoutes(t *testin
 		{http.MethodPost, "/api/auth/password/reset", "reset_password", false},
 		{http.MethodPost, "/api/auth/password/change", "change_password", true},
 		{http.MethodGet, "/api/me", "me", true},
+		{http.MethodPut, "/api/me/profile", "update_profile", true},
 		{http.MethodPut, "/api/me/notifications", "update_notifications", true},
 		{http.MethodPut, "/api/me/status-slug", "update_status_slug", true},
 		{http.MethodPost, "/api/me/notifications/test/email", "test_alert", true},
@@ -169,8 +173,8 @@ func TestNewRegistersEveryAPIEndpointOnceAndProtectsOnlyRequiredRoutes(t *testin
 		}
 		authenticated = 0
 	}
-	if len(tests) != 24 || len(recorder.calls) != 24 {
-		t.Fatalf("registered %d handlers for %d endpoint checks, want 24", len(recorder.calls), len(tests))
+	if len(tests) != 25 || len(recorder.calls) != 25 {
+		t.Fatalf("registered %d handlers for %d endpoint checks, want 25", len(recorder.calls), len(tests))
 	}
 	for name, calls := range recorder.calls {
 		if calls != 1 {

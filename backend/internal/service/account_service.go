@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/endale-dev/vigil/internal/domain"
 	apperrors "github.com/endale-dev/vigil/internal/errors"
@@ -30,6 +31,22 @@ func NewAccountService(users domain.UserRepository, telegramEnabled bool, notifi
 		account.notifiers[notifier.Name()] = notifier
 	}
 	return account, nil
+}
+
+func (account *AccountService) UpdateProfile(ctx context.Context, userID domain.ID, name string) (*domain.User, error) {
+	name = strings.TrimSpace(name)
+	if err := domain.ValidateName(name); err != nil {
+		return nil, err
+	}
+	user, err := account.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	user.Name = name
+	if err := account.users.Update(ctx, user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings) (*domain.User, error) {

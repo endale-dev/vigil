@@ -96,7 +96,7 @@ Compose starts MongoDB with a persistent named volume, waits for its health chec
 
 ## Current limitations
 
-- There is no profile editing endpoint; account name, email, and sign-in method are read-only.
+- Account name can be changed; email and sign-in method are read-only.
 - Email delivery in development is logged unless SMTP is configured.
 - The application does not terminate TLS itself; production HTTPS requires a reverse proxy or another TLS terminator.
 - The included Compose setup is a single-instance deployment starter, not a highly available or automated backup system.

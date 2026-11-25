@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Activity } from '@lucide/vue'
 import type { CheckDTO } from '../api/types'
 
 const props = defineProps<{
@@ -27,6 +28,14 @@ function checkLabel(check: CheckDTO): string {
         />
       </li>
     </ol>
-    <p v-else class="text-sm text-vigil-muted">No checks yet.</p>
+    <div v-else class="flex items-start gap-3 py-2">
+      <span class="grid size-9 shrink-0 place-items-center rounded-md bg-vigil-brand-soft text-vigil-brand" aria-hidden="true">
+        <Activity :size="17" :stroke-width="1.8" />
+      </span>
+      <div>
+        <p class="text-sm font-medium text-vigil-ink">The first check is on its way</p>
+        <p class="mt-1 text-sm text-vigil-muted">Recent results will appear here.</p>
+      </div>
+    </div>
   </div>
 </template>

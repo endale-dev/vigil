@@ -19,6 +19,7 @@ type AuthenticationHandler interface {
 }
 
 type AccountHandler interface {
+	UpdateProfile(http.ResponseWriter, *http.Request)
 	UpdateNotifications(http.ResponseWriter, *http.Request)
 	UpdateStatusSlug(http.ResponseWriter, *http.Request)
 	SendTestAlert(http.ResponseWriter, *http.Request)
@@ -72,6 +73,7 @@ func New(handlers Handlers, requireAuth func(http.Handler) http.Handler) (*http.
 		{"POST /api/auth/password/reset", http.HandlerFunc(handlers.Authentication.ResetPassword), false},
 		{"POST /api/auth/password/change", http.HandlerFunc(handlers.Authentication.ChangePassword), true},
 		{"GET /api/me", http.HandlerFunc(handlers.Authentication.Me), true},
+		{"PUT /api/me/profile", http.HandlerFunc(handlers.Account.UpdateProfile), true},
 		{"PUT /api/me/notifications", http.HandlerFunc(handlers.Account.UpdateNotifications), true},
 		{"PUT /api/me/status-slug", http.HandlerFunc(handlers.Account.UpdateStatusSlug), true},
 		{"POST /api/me/notifications/test/{channel}", http.HandlerFunc(handlers.Account.SendTestAlert), true},

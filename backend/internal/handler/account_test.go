@@ -17,19 +17,30 @@ import (
 )
 
 type accountServiceStub struct {
-	user              *domain.User
-	updateNotifyError error
-	updateNotify      domain.NotifySettings
-	updateNotifyID    domain.ID
-	updateNotifyCalls int
-	updateSlugError   error
-	updateSlug        string
-	updateSlugID      domain.ID
-	updateSlugCalls   int
-	testAlertError    error
-	testAlertChannel  domain.Channel
-	testAlertID       domain.ID
-	testAlertCalls    int
+	user               *domain.User
+	updateProfileError error
+	updateProfileName  string
+	updateProfileID    domain.ID
+	updateProfileCalls int
+	updateNotifyError  error
+	updateNotify       domain.NotifySettings
+	updateNotifyID     domain.ID
+	updateNotifyCalls  int
+	updateSlugError    error
+	updateSlug         string
+	updateSlugID       domain.ID
+	updateSlugCalls    int
+	testAlertError     error
+	testAlertChannel   domain.Channel
+	testAlertID        domain.ID
+	testAlertCalls     int
+}
+
+func (stub *accountServiceStub) UpdateProfile(_ context.Context, userID domain.ID, name string) (*domain.User, error) {
+	stub.updateProfileCalls++
+	stub.updateProfileID = userID
+	stub.updateProfileName = name
+	return stub.user, stub.updateProfileError
 }
 
 func (stub *accountServiceStub) UpdateNotifications(_ context.Context, userID domain.ID, settings domain.NotifySettings) (*domain.User, error) {
@@ -79,6 +90,22 @@ func TestUpdateNotificationsHandlerReturnsUpdatedUser(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), "private-hash") {
 		t.Fatal("notification response exposed the password hash")
+	}
+}
+
+func TestUpdateProfileHandlerReturnsUpdatedUser(t *testing.T) {
+	accountStub := &accountServiceStub{user: &domain.User{ID: "user-1", Name: "Ada Lovelace"}}
+	handler := newAccountHandlerForTest(t, accountStub, &authenticationStub{authResult: service.AuthenticatedSession{User: domain.User{ID: "user-1"}, HasPassword: true}})
+	request := httptest.NewRequest(http.MethodPut, "/api/me/profile", strings.NewReader(`{"name":"Ada Lovelace"}`))
+	request.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "session-token"})
+	response := httptest.NewRecorder()
+	handler.UpdateProfile(response, request)
+	var user UserDTO
+	if err := json.Unmarshal(response.Body.Bytes(), &user); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != http.StatusOK || accountStub.updateProfileCalls != 1 || accountStub.updateProfileID != "user-1" || accountStub.updateProfileName != "Ada Lovelace" || user.Name != "Ada Lovelace" {
+		t.Fatalf("profile update response/call = %d, %+v, %+v", response.Code, accountStub, user)
 	}
 }
 

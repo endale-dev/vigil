@@ -65,12 +65,12 @@ async function loadDetail(): Promise<void> {
 watch(monitorID, () => void loadDetail(), { immediate: true })
 
 function uptimeLabel(summary: UptimeSummaryDTO): string {
-  return summary.ratio === null ? 'No data' : `${(summary.ratio * 100).toFixed(2)}%`
+  return summary.ratio === null ? 'Awaiting checks' : `${(summary.ratio * 100).toFixed(2)}%`
 }
 
 function formatDate(value: string | null): string {
   if (!value) {
-    return 'Not available'
+    return 'First check pending'
   }
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString()
@@ -220,6 +220,7 @@ async function confirmDelete(): Promise<void> {
 
       <section class="mt-8" aria-labelledby="uptime-title">
         <h3 id="uptime-title" class="text-lg font-semibold">Uptime</h3>
+        <p v-if="monitor.uptime.last24Hours.total === 0 && monitor.uptime.last7Days.total === 0 && monitor.uptime.last30Days.total === 0" class="mt-1 text-sm text-vigil-muted">Uptime begins when the first check completes.</p>
         <dl class="mt-4 grid gap-4 sm:grid-cols-3">
           <div v-for="period in [
             { label: '24 hours', value: monitor.uptime.last24Hours },
@@ -228,7 +229,7 @@ async function confirmDelete(): Promise<void> {
           ]" :key="period.label" class="border-t border-vigil-rule pt-4">
             <dt class="text-sm text-vigil-muted">Last {{ period.label }}</dt>
             <dd class="mt-2 text-2xl font-semibold">{{ uptimeLabel(period.value) }}</dd>
-            <dd class="mt-1 text-xs text-vigil-muted">{{ period.value.up }} of {{ period.value.total }} checks up</dd>
+            <dd v-if="period.value.total > 0" class="mt-1 text-xs text-vigil-muted">{{ period.value.up }} of {{ period.value.total }} checks up</dd>
           </div>
         </dl>
       </section>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
-import { Gauge, Globe, PanelLeftClose, PanelLeftOpen, Settings } from '@lucide/vue'
+import { Gauge, Globe, PanelLeftClose, PanelLeftOpen, Settings, UserRound } from '@lucide/vue'
 import { useSession } from '../composables/useSession'
 
 const { user } = useSession()
@@ -14,6 +14,7 @@ const navigation = computed(() => [
     : []),
   { label: 'Settings', to: { name: 'settings' }, icon: Settings },
 ])
+const mobileNavigation = computed(() => [...navigation.value, { label: 'Profile', to: { name: 'profile' }, icon: UserRound }])
 const initials = computed(() => user.value?.name
   .split(/\s+/)
   .filter(Boolean)
@@ -72,7 +73,7 @@ function toggleSidebar(): void {
         </button>
       </div>
 
-      <nav class="mt-8 grid gap-1 px-3" :class="isSidebarCollapsed ? 'px-3' : 'lg:px-4'" aria-label="Workspace navigation">
+      <nav class="mt-8 grid gap-1 px-3 lg:px-4" aria-label="Workspace navigation">
         <RouterLink
           v-for="item in navigation"
           :key="item.label"
@@ -80,7 +81,7 @@ function toggleSidebar(): void {
           :aria-label="item.label"
           :title="item.label"
           class="relative flex min-h-11 items-center gap-3 rounded-md text-sm font-medium text-vigil-muted transition-colors hover:bg-vigil-paper hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand"
-          :class="isSidebarCollapsed ? 'justify-center px-2' : 'px-3'"
+          :class="[isSidebarCollapsed ? 'justify-center px-2' : 'px-3', item.label === 'Settings' ? 'mt-3 border-t border-vigil-rule pt-3' : '']"
           active-class="!bg-vigil-brand-soft !text-vigil-brand before:absolute before:left-0 before:h-6 before:w-0.5 before:bg-vigil-brand"
         >
           <component :is="item.icon" :size="18" :stroke-width="1.8" class="shrink-0" aria-hidden="true" />
@@ -89,14 +90,16 @@ function toggleSidebar(): void {
       </nav>
 
       <div class="mt-auto border-t border-vigil-rule p-3" :class="isSidebarCollapsed ? '' : 'lg:p-4'">
-        <div class="flex items-center gap-3" :class="isSidebarCollapsed ? 'justify-center' : ''" :title="user?.name ?? 'Vigil user'">
-          <span class="grid size-9 shrink-0 place-items-center rounded-full bg-vigil-brand-soft text-xs font-semibold text-vigil-brand" aria-hidden="true">
-            {{ initials }}
-          </span>
-          <div v-if="!isSidebarCollapsed" class="hidden min-w-0 lg:block">
-            <p class="truncate text-sm font-medium text-vigil-ink">{{ user?.name ?? 'Vigil user' }}</p>
-            <p class="truncate text-xs text-vigil-muted">{{ user?.email ?? '' }}</p>
-          </div>
+        <div class="flex justify-center" :class="isSidebarCollapsed ? '' : 'lg:justify-start'">
+          <RouterLink class="flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-vigil-brand" :class="isSidebarCollapsed ? 'size-9 justify-center' : 'w-full'" :to="{ name: 'profile' }" :aria-label="`Profile for ${user?.name ?? 'Vigil user'}`" :title="isSidebarCollapsed ? `${user?.name ?? 'Vigil user'} · Profile` : undefined" active-class="!text-vigil-brand">
+            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-vigil-brand-soft text-xs font-semibold text-vigil-brand" aria-hidden="true">
+              {{ initials }}
+            </span>
+            <div v-if="!isSidebarCollapsed" class="hidden min-w-0 flex-1 lg:block">
+              <p class="truncate text-sm font-medium text-vigil-ink">{{ user?.name ?? 'Vigil user' }}</p>
+              <p class="truncate text-xs text-vigil-muted">{{ user?.email ?? '' }}</p>
+            </div>
+          </RouterLink>
         </div>
       </div>
     </aside>
@@ -112,9 +115,9 @@ function toggleSidebar(): void {
       aria-label="Primary navigation"
       style="height: calc(64px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom)"
     >
-      <div class="mx-auto grid h-14 max-w-md gap-1" :style="{ gridTemplateColumns: `repeat(${navigation.length}, minmax(0, 1fr))` }">
+      <div class="mx-auto grid h-14 max-w-md gap-1" :style="{ gridTemplateColumns: `repeat(${mobileNavigation.length}, minmax(0, 1fr))` }">
         <RouterLink
-          v-for="item in navigation"
+          v-for="item in mobileNavigation"
           :key="item.label"
           :to="item.to"
           class="relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-md px-1 text-[11px] font-medium text-vigil-muted transition-colors hover:text-vigil-ink focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-vigil-brand"

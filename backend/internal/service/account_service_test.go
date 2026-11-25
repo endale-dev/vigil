@@ -36,6 +36,27 @@ func TestAccountServiceUpdatesNotifications(t *testing.T) {
 	}
 }
 
+func TestAccountServiceUpdatesAndValidatesProfileName(t *testing.T) {
+	users := &memoryUsers{stored: map[domain.ID]*domain.User{"user-1": {ID: "user-1", Name: "Ada"}}}
+	account, err := NewAccountService(users, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := account.UpdateProfile(context.Background(), "user-1", "  Ada Lovelace  ")
+	if err != nil {
+		t.Fatalf("UpdateProfile() error = %v", err)
+	}
+	if updated.Name != "Ada Lovelace" || users.stored["user-1"].Name != "Ada Lovelace" {
+		t.Fatalf("stored profile name = %q, returned %q", users.stored["user-1"].Name, updated.Name)
+	}
+	if _, err := account.UpdateProfile(context.Background(), "user-1", " "); err == nil {
+		t.Fatal("UpdateProfile() accepted an empty name")
+	}
+	if users.stored["user-1"].Name != "Ada Lovelace" {
+		t.Fatal("invalid profile update changed the saved name")
+	}
+}
+
 func TestAccountServiceValidatesAndGatesTelegramChatID(t *testing.T) {
 	for _, chatID := range []string{"1234", "123456789012345678901", "+12345", "12 345", "--12345"} {
 		users := &memoryUsers{stored: map[domain.ID]*domain.User{"user-1": {ID: "user-1"}}}

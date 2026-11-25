@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
+  Activity,
   Pause,
   Play,
   Plus,
@@ -47,7 +48,7 @@ const uptime24Hours = computed(() => {
 })
 const overallStatus = computed(() => {
   if (monitors.value.length === 0) {
-    return { title: 'No monitors yet', detail: '', tone: 'neutral' }
+    return { title: 'Monitoring is ready', detail: 'Add your first service to begin collecting checks.', tone: 'neutral' }
   }
   if (activeMonitors.value.length === 0) {
     return { title: 'Monitoring is paused', detail: 'Resume a monitor to start receiving fresh checks.', tone: 'neutral' }
@@ -138,12 +139,12 @@ async function confirmDelete(): Promise<void> {
 }
 
 function uptimeLabel(ratio: number | null): string {
-  return ratio === null ? 'No data' : `${(ratio * 100).toFixed(2)}%`
+  return ratio === null ? 'Awaiting checks' : `${(ratio * 100).toFixed(2)}%`
 }
 
 function lastCheckedLabel(value: string | null): string {
   if (!value) {
-    return 'No checks yet'
+    return 'First check pending'
   }
   const checkedAt = new Date(value)
   return Number.isNaN(checkedAt.getTime())
@@ -207,7 +208,8 @@ function lastCheckedLabel(value: string | null): string {
         </div>
         <div class="border-l border-vigil-rule py-4 pl-4 sm:pl-6">
           <p class="text-sm text-vigil-muted">24h success</p>
-          <p class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ uptime24Hours === null ? '—' : `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
+          <p v-if="uptime24Hours !== null" class="mt-1 font-vigil-mono text-2xl font-medium tabular-nums text-vigil-ink">{{ `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
+          <p v-else class="mt-2 text-sm font-medium text-vigil-muted">Awaiting checks</p>
         </div>
       </section>
 
@@ -230,8 +232,14 @@ function lastCheckedLabel(value: string | null): string {
             Try again
           </button>
         </div>
-        <div v-else-if="monitors.length === 0" class="border-y border-vigil-rule py-6 text-sm text-vigil-muted">
-          Your monitor list will appear here once you add a service.
+        <div v-else-if="monitors.length === 0" class="flex items-start gap-4 border-y border-vigil-rule py-7">
+          <span class="grid size-10 shrink-0 place-items-center rounded-md bg-vigil-brand-soft text-vigil-brand" aria-hidden="true">
+            <Activity :size="18" :stroke-width="1.8" />
+          </span>
+          <div>
+            <h3 class="text-sm font-semibold text-vigil-ink">Your first monitor starts here</h3>
+            <p class="mt-1 text-sm text-vigil-muted">Add a service to see its availability and check history.</p>
+          </div>
         </div>
         <div v-else>
           <div class="hidden grid-cols-[minmax(0,1.7fr)_minmax(7.5rem,.7fr)_minmax(5.5rem,.6fr)_minmax(8rem,.8fr)_auto] gap-4 border-y border-vigil-rule py-2.5 text-xs font-medium text-vigil-muted xl:grid">

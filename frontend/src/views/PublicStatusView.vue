@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { Globe } from '@lucide/vue'
 import { ApiError } from '../api/client'
 import { getPublicStatus } from '../api/status'
 import type { PublicCheckDTO, UptimeSummaryDTO } from '../api/types'
@@ -51,7 +52,7 @@ const latestCheckLabel = computed(() => latestCheckAt.value
   : 'Waiting for the first check')
 const overallSummary = computed(() => {
   if (!data.value || monitorCounts.value.total === 0) {
-    return { title: 'No public monitors', detail: 'Services shared to this page will appear here.' }
+    return { title: 'This page is ready', detail: 'Shared service health will appear here.' }
   }
   if (data.value.status === 'operational') {
     return { title: 'All systems operational', detail: `${monitorCounts.value.up} of ${monitorCounts.value.total} services are responding normally.` }
@@ -66,11 +67,11 @@ const overallSummary = computed(() => {
 watch(slug, () => void refresh())
 
 function uptimeLabel(summary: UptimeSummaryDTO): string {
-  return summary.ratio === null ? 'No data' : `${(summary.ratio * 100).toFixed(2)}%`
+  return summary.ratio === null ? 'Awaiting checks' : `${(summary.ratio * 100).toFixed(2)}%`
 }
 
 function formatDate(value: string | null): string {
-  if (!value) return 'No checks yet'
+  if (!value) return 'First check pending'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString()
 }
@@ -132,7 +133,8 @@ function checkLabel(check: PublicCheckDTO): string {
         </div>
         <div class="border-l border-vigil-rule py-4 pl-4 sm:pl-6">
           <p class="text-sm text-vigil-muted">24h success</p>
-          <p class="mt-1 font-vigil-mono text-2xl tabular-nums">{{ uptime24Hours === null ? '—' : `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
+          <p v-if="uptime24Hours !== null" class="mt-1 font-vigil-mono text-2xl tabular-nums">{{ `${(uptime24Hours * 100).toFixed(2)}%` }}</p>
+          <p v-else class="mt-2 text-sm font-medium text-vigil-muted">Awaiting checks</p>
         </div>
       </section>
 
@@ -183,14 +185,20 @@ function checkLabel(check: PublicCheckDTO): string {
                   />
                 </li>
               </ol>
-              <span v-else class="text-xs text-vigil-muted">No checks yet</span>
+              <span v-else class="text-xs text-vigil-muted">First check pending</span>
             </div>
           </li>
         </ul>
 
-        <p v-else class="border-b border-vigil-rule py-6 text-sm text-vigil-muted">
-          No public monitors are available yet.
-        </p>
+        <div v-else class="flex items-start gap-4 border-b border-vigil-rule py-7">
+          <span class="grid size-10 shrink-0 place-items-center rounded-md bg-vigil-brand-soft text-vigil-brand" aria-hidden="true">
+            <Globe :size="18" :stroke-width="1.8" />
+          </span>
+          <div>
+            <h3 class="text-sm font-semibold text-vigil-ink">No public monitors yet</h3>
+            <p class="mt-1 text-sm text-vigil-muted">Mark a monitor as public to share its service health here.</p>
+          </div>
+        </div>
       </section>
       <p v-if="error" class="text-sm text-vigil-warn" role="status">Refresh failed. Showing the last loaded status.</p>
     </div>
