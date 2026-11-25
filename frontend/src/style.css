@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+@theme {
+  --color-vigil-canvas: #f4f6fa;
+  --color-vigil-surface: #ffffff;
+  --color-vigil-ink: #202a3a;
+  --color-vigil-muted: #687386;
+  --color-vigil-line: #e1e6ef;
+  --color-vigil-sidebar: #202b40;
+  --color-vigil-brand: #3158d4;
+  --color-vigil-brand-hover: #2849b8;
+  --color-vigil-brand-soft: #edf1ff;
+}

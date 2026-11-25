@@ -5,6 +5,7 @@ withDefaults(defineProps<{
   id: string
   label: string
   modelValue: string
+  tone?: 'dark' | 'light'
   type?: FieldType
   autocomplete?: string
   placeholder?: string
@@ -47,10 +48,13 @@ function updateValue(event: Event): void {
       :maxlength="maxLength"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? `${id}-error` : undefined"
-      class="min-h-10 rounded-md border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+      class="min-h-10 rounded-lg border px-3 py-2 outline-none transition-shadow placeholder:text-vigil-muted/75 disabled:cursor-not-allowed disabled:opacity-60"
+      :class="tone === 'light'
+        ? 'border-vigil-line bg-white text-vigil-ink focus-visible:ring-2 focus-visible:ring-vigil-brand'
+        : 'border-slate-600 bg-slate-900 text-slate-100 focus-visible:ring-2 focus-visible:ring-emerald-400'"
       @input="updateValue"
     />
-    <p v-if="error" :id="`${id}-error`" class="text-sm text-red-300">
+    <p v-if="error" :id="`${id}-error`" class="text-sm" :class="tone === 'light' ? 'text-red-700' : 'text-red-300'">
       {{ error }}
     </p>
   </div>
