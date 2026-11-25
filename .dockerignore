@@ -1,0 +1,8 @@
+.git
+**/node_modules
+**/bin
+**/dist
+**/.env
+**/.env.*
+backend/go.mod
+backend/go.sum
