@@ -13,10 +13,10 @@ GO_SOURCES := $(wildcard backend/*.go backend/internal/*/*.go backend/internal/*
 backend-module:
 ifeq ($(wildcard backend/go.mod),)
 	$(GO) -C backend mod init github.com/endale-dev/vigil
+endif
 	$(GO) -C backend mod edit -go=1.26
 	$(GO) -C backend get go.mongodb.org/mongo-driver/v2@v2.10.1
 	$(GO) -C backend mod tidy
-endif
 
 test: backend-module
 	$(if $(GO_SOURCES),,$(error No Go source files exist yet; add a Go package before running tests))
