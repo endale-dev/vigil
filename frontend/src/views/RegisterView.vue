@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ApiError } from '../api/client'
 import FormField from '../components/FormField.vue'
 import AuthLayout from '../components/AuthLayout.vue'
+import GoogleAuthButton from '../components/GoogleAuthButton.vue'
 import { useSession } from '../composables/useSession'
 
 const router = useRouter()
@@ -65,12 +66,15 @@ async function submit(): Promise<void> {
   <AuthLayout mode="register">
     <section aria-labelledby="register-title">
       <h1 id="register-title" class="console-title">Create your account</h1>
+      <p class="console-description">Start monitoring your services in minutes.</p>
 
       <p v-if="errorMessage" class="mt-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         {{ errorMessage }}
       </p>
 
-      <form class="mt-6 grid gap-5" @submit.prevent="submit">
+      <GoogleAuthButton label="Sign up with Google" :disabled="submitting" />
+
+      <form class="entry-form" @submit.prevent="submit">
         <FormField
           id="register-name"
           v-model="name"

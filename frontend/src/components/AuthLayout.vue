@@ -10,7 +10,7 @@ defineProps<{ mode: 'login' | 'register' }>()
   <main class="account-entry console-theme">
     <div class="entry-content">
       <RouterLink class="entry-brand" :to="{ name: 'home' }" aria-label="Vigil home"><VigilBrand /></RouterLink>
-      <slot />
+      <div class="entry-card"><slot /></div>
       <p class="entry-switch">
         {{ mode === 'login' ? 'New to Vigil?' : 'Already have an account?' }}
         <RouterLink :to="{ name: mode === 'login' ? 'register' : 'login' }">

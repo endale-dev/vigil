@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { ApiError } from '../api/client'
-import { getCapabilities, startGoogleLogin } from '../api/auth'
 import FormField from '../components/FormField.vue'
 import AuthLayout from '../components/AuthLayout.vue'
+import GoogleAuthButton from '../components/GoogleAuthButton.vue'
 import { useSession } from '../composables/useSession'
 
 const route = useRoute()
@@ -16,17 +16,8 @@ const emailError = ref('')
 const passwordError = ref('')
 const errorMessage = ref('')
 const submitting = ref(false)
-const googleEnabled = ref(false)
 const googleError = computed(() => route.query.error === 'google')
 const resetSuccess = computed(() => route.query.reset === 'success')
-
-onMounted(async () => {
-  try {
-    googleEnabled.value = (await getCapabilities()).google
-  } catch {
-    googleEnabled.value = false
-  }
-})
 
 async function submit(): Promise<void> {
   emailError.value = ''
@@ -68,6 +59,7 @@ async function submit(): Promise<void> {
   <AuthLayout mode="login">
     <section aria-labelledby="login-title">
       <h1 id="login-title" class="console-title">Sign in</h1>
+      <p class="console-description">Welcome back to Vigil.</p>
 
       <p v-if="googleError" class="mt-5 border-l-2 border-vigil-down bg-vigil-down-soft px-4 py-3 text-sm text-vigil-down" role="alert">
         Google sign-in did not work. Please try again or use your email and password.
@@ -79,7 +71,9 @@ async function submit(): Promise<void> {
         {{ errorMessage }}
       </p>
 
-      <form class="mt-6 grid gap-5" @submit.prevent="submit">
+      <GoogleAuthButton label="Continue with Google" :disabled="submitting" />
+
+      <form class="entry-form" @submit.prevent="submit">
         <FormField
           id="login-email"
           v-model="email"
@@ -114,21 +108,6 @@ async function submit(): Promise<void> {
           {{ submitting ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
-
-      <template v-if="googleEnabled">
-        <div class="my-5 flex items-center gap-3 text-xs text-vigil-muted" aria-hidden="true">
-          <span class="h-px flex-1 bg-vigil-rule" />
-          <span>or</span>
-          <span class="h-px flex-1 bg-vigil-rule" />
-        </div>
-        <button
-          class="min-h-11 w-full rounded-md border border-vigil-rule px-4 py-2 font-medium hover:bg-vigil-paper focus-visible:outline-2 focus-visible:outline-offset-2"
-          type="button"
-          @click="startGoogleLogin"
-        >
-          Continue with Google
-        </button>
-      </template>
 
     </section>
   </AuthLayout>
