@@ -12,7 +12,9 @@ import {
 } from '../api/monitors'
 import type { MonitorListDTO, MonitorRequest } from '../api/types'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import LoadingStatus from '../components/LoadingStatus.vue'
 import MonitorForm from '../components/MonitorForm.vue'
+import PaginatedList from '../components/PaginatedList.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import WorkspaceShell from '../components/WorkspaceShell.vue'
 import { checkIntervalLabel } from '../format'
@@ -40,6 +42,7 @@ function openMonitorRow(event: MouseEvent, id: string): void {
 }
 type MonitorStatusFilter = 'all' | 'up' | 'down' | 'unknown' | 'paused'
 const statusFilter = ref<MonitorStatusFilter>('all')
+const pageFilters = computed(() => [search.value, statusFilter.value])
 const statusFilterRoot = ref<HTMLElement | null>(null)
 const statusFilterTrigger = ref<HTMLButtonElement | null>(null)
 const statusFilterOpen = ref(false)
@@ -311,9 +314,9 @@ function lastCheckedLabel(value: string | null): string {
         <p v-if="actionError" class="console-notice danger" role="alert">{{ actionError }}</p>
         <div v-if="monitorError" class="console-notice danger" role="alert">
           {{ monitorData ? 'Showing the last available results.' : '' }} {{ loadError }}
-          <button type="button" class="text-action" @click="refresh">Try again</button>
+          <button type="button" class="text-action" :disabled="isLoading" @click="refresh">{{ isLoading ? 'Retrying…' : 'Try again' }}</button>
         </div>
-        <div v-if="!monitorData && !monitorError" class="monitor-empty" role="status">Loading monitors…</div>
+        <div v-if="!monitorData && !monitorError" class="monitor-empty"><LoadingStatus>Loading monitors…</LoadingStatus></div>
         <div v-if="isEmpty" class="monitor-empty first-monitor">
           <h3>No monitors yet</h3>
           <p>Add an HTTP, TCP, or TLS endpoint to start checking its availability.</p>
@@ -322,32 +325,36 @@ function lastCheckedLabel(value: string | null): string {
             Add monitor
           </button>
         </div>
-        <template v-if="monitors.length">
-          <table v-if="filteredMonitors.length" class="monitor-table" aria-label="Your monitors">
-            <thead><tr><th scope="col">Service</th><th scope="col">Status</th><th scope="col">24h uptime</th><th scope="col">Last check</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
-            <tbody><tr v-for="monitor in filteredMonitors" :key="monitor.id" class="monitor-row" @click="openMonitorRow($event, monitor.id)" @auxclick="openMonitorRow($event, monitor.id)">
-              <th scope="row"><div class="service-text">
-                <RouterLink :to="{ name: 'monitor-detail', params: { id: monitor.id } }">{{ monitor.name }}</RouterLink>
-                <small :title="monitor.target">{{ monitor.type.toUpperCase() }} · {{ monitor.target }}</small>
-              </div></th>
-              <td class="status-cell"><StatusBadge plain :status="monitor.enabled ? monitor.status : 'paused'" /></td>
-              <td class="uptime-cell"><span class="cell-label">24h uptime</span><span class="number">{{ monitor.uptime24Hours.ratio === null ? '—' : uptimeLabel(monitor.uptime24Hours.ratio) }}</span>
-              </td>
-              <td class="last-cell"><span class="cell-label">Last check</span>{{ lastCheckedLabel(monitor.lastCheckedAt) }}<small>{{ checkIntervalLabel(monitor.intervalSeconds) }}</small></td>
-              <td class="actions-cell"><div>
-                <button type="button" class="icon-control" :aria-label="(monitor.enabled ? 'Pause ' : 'Resume ') + monitor.name" :title="monitor.enabled ? 'Pause monitor' : 'Resume monitor'" :disabled="pendingActionID !== null" @click="toggleMonitor(monitor)"><component :is="monitor.enabled ? Pause : Play" :size="15" /></button>
-                <button type="button" class="icon-control destructive" :aria-label="'Delete ' + monitor.name" title="Delete monitor" :disabled="pendingActionID !== null" @click="deleteTarget = monitor"><Trash2 :size="15" /></button>
-              </div></td>
-            </tr></tbody>
-          </table>
-          <div v-else class="monitor-empty" role="status"><h3>No matching monitors</h3><button type="button" class="text-action" @click="search = ''; statusFilter = 'all'">Clear filters</button></div>
-        </template>
-        <footer v-if="monitorData && !isEmpty" class="table-footer">
-          <span>{{ monitorError ? 'Last successful update' : 'Updated' }} {{ lastSynced }}</span>
-          <button type="button" class="icon-control" aria-label="Refresh monitors" title="Refresh monitors (auto-refreshes every 15 seconds)" :disabled="isLoading" @click="refresh">
-            <RefreshCw :size="14" :class="{ refreshing: isLoading }" aria-hidden="true" />
-          </button>
-        </footer>
+        <PaginatedList v-if="monitors.length" :items="filteredMonitors" :page-size="10" label="monitors" :reset-on="pageFilters">
+          <template #default="{ items }">
+            <table v-if="filteredMonitors.length" class="monitor-table" aria-label="Your monitors">
+              <thead><tr><th scope="col">Service</th><th scope="col">Status</th><th scope="col">24h uptime</th><th scope="col">Last check</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+              <tbody><tr v-for="monitor in items" :key="monitor.id" class="monitor-row" @click="openMonitorRow($event, monitor.id)" @auxclick="openMonitorRow($event, monitor.id)">
+                <th scope="row"><div class="service-text">
+                  <RouterLink :to="{ name: 'monitor-detail', params: { id: monitor.id } }">{{ monitor.name }}</RouterLink>
+                  <small :title="monitor.target">{{ monitor.type.toUpperCase() }} · {{ monitor.target }}</small>
+                </div></th>
+                <td class="status-cell"><StatusBadge plain :status="monitor.enabled ? monitor.status : 'paused'" /></td>
+                <td class="uptime-cell"><span class="cell-label">24h uptime</span><span class="number">{{ monitor.uptime24Hours.ratio === null ? '—' : uptimeLabel(monitor.uptime24Hours.ratio) }}</span>
+                </td>
+                <td class="last-cell"><span class="cell-label">Last check</span>{{ lastCheckedLabel(monitor.lastCheckedAt) }}<small>{{ checkIntervalLabel(monitor.intervalSeconds) }}</small></td>
+                <td class="actions-cell"><div>
+                  <button type="button" class="icon-control" :aria-label="(monitor.enabled ? 'Pause ' : 'Resume ') + monitor.name" :title="monitor.enabled ? 'Pause monitor' : 'Resume monitor'" :disabled="pendingActionID !== null" @click="toggleMonitor(monitor)"><component :is="monitor.enabled ? Pause : Play" :size="15" /></button>
+                  <button type="button" class="icon-control destructive" :aria-label="'Delete ' + monitor.name" title="Delete monitor" :disabled="pendingActionID !== null" @click="deleteTarget = monitor"><Trash2 :size="15" /></button>
+                </div></td>
+              </tr></tbody>
+            </table>
+            <div v-else class="monitor-empty" role="status"><h3>No matching monitors</h3><button type="button" class="text-action" @click="search = ''; statusFilter = 'all'">Clear filters</button></div>
+          </template>
+          <template #footer>
+            <div class="table-sync">
+              <span>{{ monitorError ? 'Last successful update' : 'Updated' }} {{ lastSynced }}</span>
+              <button type="button" class="icon-control" aria-label="Refresh monitors" title="Refresh monitors (auto-refreshes every 15 seconds)" :disabled="isLoading" @click="refresh">
+                <RefreshCw :size="14" :class="{ refreshing: isLoading }" aria-hidden="true" />
+              </button>
+            </div>
+          </template>
+        </PaginatedList>
       </section>
     </section>
 

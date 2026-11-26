@@ -8,8 +8,8 @@ import type {
   MonitorRequest,
 } from './types'
 
-export function listMonitors(): Promise<MonitorListDTO[]> {
-  return apiRequest<MonitorListDTO[]>('/api/monitors', {}, { authenticated: true })
+export function listMonitors(signal?: AbortSignal): Promise<MonitorListDTO[]> {
+  return apiRequest<MonitorListDTO[]>('/api/monitors', { signal }, { authenticated: true })
 }
 
 export function createMonitor(input: MonitorRequest): Promise<MonitorDTO> {
@@ -19,8 +19,8 @@ export function createMonitor(input: MonitorRequest): Promise<MonitorDTO> {
   }, { authenticated: true })
 }
 
-export function getMonitor(id: string): Promise<MonitorDetailDTO> {
-  return apiRequest<MonitorDetailDTO>(monitorPath(id), {}, { authenticated: true })
+export function getMonitor(id: string, signal?: AbortSignal): Promise<MonitorDetailDTO> {
+  return apiRequest<MonitorDetailDTO>(monitorPath(id), { signal }, { authenticated: true })
 }
 
 export function updateMonitor(id: string, input: MonitorRequest): Promise<MonitorDTO> {
@@ -42,12 +42,12 @@ export function resumeMonitor(id: string): Promise<MonitorDTO> {
   return apiRequest<MonitorDTO>(`${monitorPath(id)}/resume`, { method: 'POST' }, { authenticated: true })
 }
 
-export function listMonitorChecks(id: string, limit?: number): Promise<CheckDTO[]> {
-  return apiRequest<CheckDTO[]>(withLimit(`${monitorPath(id)}/checks`, limit), {}, { authenticated: true })
+export function listMonitorChecks(id: string, limit?: number, signal?: AbortSignal): Promise<CheckDTO[]> {
+  return apiRequest<CheckDTO[]>(withLimit(`${monitorPath(id)}/checks`, limit), { signal }, { authenticated: true })
 }
 
-export function listMonitorIncidents(id: string, limit?: number): Promise<IncidentDTO[]> {
-  return apiRequest<IncidentDTO[]>(withLimit(`${monitorPath(id)}/incidents`, limit), {}, { authenticated: true })
+export function listMonitorIncidents(id: string, limit?: number, signal?: AbortSignal): Promise<IncidentDTO[]> {
+  return apiRequest<IncidentDTO[]>(withLimit(`${monitorPath(id)}/incidents`, limit), { signal }, { authenticated: true })
 }
 
 function monitorPath(id: string): string {

@@ -18,10 +18,10 @@ function checkLabel(check: CheckDTO): string {
 
 <template>
   <div>
-    <ol v-if="chronologicalChecks.length" class="flex flex-wrap gap-1" aria-label="Recent monitor checks">
-      <li v-for="check in chronologicalChecks" :key="check.id" :title="checkLabel(check)">
+    <ol v-if="chronologicalChecks.length" class="flex gap-1" aria-label="Recent monitor checks, oldest to newest">
+      <li v-for="check in chronologicalChecks" :key="check.id" class="min-w-0 max-w-6 flex-1" :title="checkLabel(check)">
         <span
-          class="block h-6 w-2.5 rounded-sm"
+          class="block h-6 rounded-sm"
           :class="check.up ? 'bg-vigil-up' : 'bg-vigil-down'"
           :aria-label="checkLabel(check)"
           role="img"

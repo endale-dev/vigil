@@ -35,7 +35,7 @@
 .console-button.primary { background: var(--color-vigil-brand); color: white; }
 .console-button.primary:hover { background: var(--color-vigil-brand-hover); }
 .console-button.secondary { background: white; border: 1px solid #cddad2; }
-.console-button.secondary:hover,.icon-control:hover { background: #edf4ef; }
+.console-button.secondary:hover:not(:disabled),.icon-control:hover:not(:disabled) { background: #edf4ef; }
 .icon-control { width: 36px; height: 36px; flex-shrink: 0; display: inline-grid; place-items: center; border-radius: 4px; color: #4c6357; }
 .icon-control.destructive:hover { color: #a33330; background: #fdefed; }
 .console-panel { border: 1px solid var(--color-vigil-rule); border-radius: 4px; background: white; }
@@ -115,7 +115,7 @@ body:has(.console-theme dialog[open]) { overflow: hidden; }
 .metric:first-child { padding-inline-start: 0; border-inline-start: 0; }
 .metric dt { color: var(--color-vigil-muted); font-size: 13px; }
 .metric dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 9px; margin-top: 4px; font: 500 clamp(24px,2.2vw,32px)/1.2 var(--font-vigil-sans); font-variant-numeric: tabular-nums; letter-spacing: -.035em; }
-.metric small,.table-footer,.monitor-table small,.cell-label { color: var(--color-vigil-muted); font: 400 12px/1.5 var(--font-vigil-sans); letter-spacing: normal; }
+.metric small,.list-footer,.monitor-table small,.cell-label { color: var(--color-vigil-muted); font: 400 12px/1.5 var(--font-vigil-sans); letter-spacing: normal; }
 .monitor-panel { border: 0; }
 .monitor-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding-bottom: 14px; }
 .panel-title h2,.section-title { color: var(--color-vigil-ink); font-size: 19px; font-weight: 600; letter-spacing: -.025em; }
@@ -176,7 +176,15 @@ body:has(.console-theme dialog[open]) { overflow: hidden; }
 .cell-label { display: none; }.number { font: 12px var(--font-vigil-mono); }
 
 .actions-cell > div { display: flex; justify-content: flex-end; }
-.table-footer { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-height: 43px; padding-right: 7px; border-top: 1px solid var(--color-vigil-rule); }
+.list-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-height: 46px; padding-block: 4px; border-top: 1px solid var(--color-vigil-rule); }
+.list-pagination,.table-sync { display: flex; align-items: center; gap: 4px; }
+.list-pagination { flex: 1; font-variant-numeric: tabular-nums; }
+.list-pagination span { margin-right: 6px; }
+.list-pagination .icon-control { width: 32px; height: 32px; border: 1px solid var(--color-vigil-rule); }
+.list-pagination .icon-control:disabled { opacity: .4; }
+.table-sync { margin-left: auto; }
+.loading-status { display: flex; align-items: center; gap: 9px; color: var(--color-vigil-muted); font-size: 14px; }
+.loading-status svg { color: var(--color-vigil-brand); }
 .monitor-empty { display: grid; justify-items: center; text-align: center; gap: 7px; padding: 28px 15px 32px; border-top: 1px solid var(--color-vigil-rule); color: var(--color-vigil-muted); font-size: 14px; }
 .monitor-empty h3 { font-size: 17px; font-weight: 600; color: var(--color-vigil-ink); }
 .monitor-empty.first-monitor {
@@ -276,7 +284,6 @@ body:has(.console-theme dialog[open]) { overflow: hidden; }
   .last-cell { grid-row: 3; grid-column: 1; }
   .last-cell small { display: block; margin: 1px 0 0; }
   .actions-cell { grid-column: 2; grid-row: 2 / 4; align-self: end; }
-  .table-footer { padding: 0; }
 }
 /* Account and service detail panels */
 .account-workspace { max-width: 850px; }
@@ -291,8 +298,9 @@ body:has(.console-theme dialog[open]) { overflow: hidden; }
 .profile-details dd { overflow-wrap: anywhere; font-size: 14px; font-weight: 500; }
 .profile-edit { display: grid; gap: 14px; padding: 16px 24px 24px; max-width: 530px; }
 .profile-feedback { padding: 0 24px 14px; font-size: 14px; color: var(--color-vigil-up); }
-.detail-back { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin-bottom: 12px; color: var(--color-vigil-brand); font-size: 13px; font-weight: 550; }
-.detail-back:hover { text-decoration: underline; }
+.detail-navigation { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.detail-back,.detail-refresh { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; color: var(--color-vigil-brand); font-size: 13px; font-weight: 550; }
+.detail-back:hover,.detail-refresh:hover:not(:disabled) { text-decoration: underline; }
 .detail-actions { display: flex; align-items: center; gap: 7px; }
 .detail-metadata { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); padding: 18px 0; }
 .detail-metadata > div,.detail-uptime dl > div { padding-inline: 20px; border-left: 1px solid var(--color-vigil-rule); }
@@ -302,12 +310,17 @@ body:has(.console-theme dialog[open]) { overflow: hidden; }
 .detail-uptime,.detail-history { margin-top: 17px; }
 .detail-uptime { padding: 19px 0; }
 .detail-uptime .panel-title { padding-inline: 20px; }
+.detail-uptime .panel-title,.history-card .panel-title { display: flex; align-items: center; gap: 9px; }
+.detail-uptime .panel-title svg,.history-card .panel-title svg { color: var(--color-vigil-brand); }
 .detail-uptime dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 18px; }
 .detail-uptime dd:not(.uptime-caption) { font: clamp(21px,2.2vw,31px) var(--font-vigil-mono); letter-spacing: -.07em; margin-top: 5px; }
 .uptime-caption,.history-empty,.check-list p,.check-list time,.incident-list p { font-size: 12px; color: var(--color-vigil-muted); line-height: 1.6; }
 .detail-history { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr); gap: 16px; align-items: start; }
 .history-card { padding: 18px 20px; min-width: 0; }
 .history-card .panel-title { padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid var(--color-vigil-rule); }
+.history-card .console-notice { margin: 0 0 10px; }
+.history-card .list-footer { margin-top: 12px; padding-bottom: 0; }
+.history-card .list-pagination span { flex: 1; }
 .history-empty { font-size: 14px; }
 .check-list { margin-top: 15px; }.check-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--color-vigil-rule); }
 .check-list li > div,.incident-list li { overflow-wrap: anywhere; min-width: 0; }

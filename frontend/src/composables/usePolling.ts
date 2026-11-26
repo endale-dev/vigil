@@ -1,37 +1,18 @@
-import { onMounted, onUnmounted, readonly, ref, shallowRef } from 'vue'
+import { onMounted, onUnmounted, readonly } from 'vue'
+import { useAsyncResource } from './useAsyncResource'
 
-export function usePolling<T>(load: () => Promise<T>, intervalMs: number) {
+export function usePolling<T>(load: (signal: AbortSignal) => Promise<T>, intervalMs: number) {
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
     throw new RangeError('Polling interval must be greater than zero.')
   }
 
-  const data = shallowRef<T | null>(null)
-  const error = shallowRef<unknown>(null)
-  const isLoading = ref(false)
+  const { data, error, loading: isLoading, refresh } = useAsyncResource(load)
   let timer: ReturnType<typeof setInterval> | undefined
-  let requestInFlight = false
-
-  async function refresh(): Promise<void> {
-    if (requestInFlight) {
-      return
-    }
-
-    requestInFlight = true
-    isLoading.value = true
-    try {
-      data.value = await load()
-      error.value = null
-    } catch (caught: unknown) {
-      error.value = caught
-    } finally {
-      requestInFlight = false
-      isLoading.value = false
-    }
-  }
 
   onMounted(() => {
-    void refresh()
-    timer = setInterval(() => void refresh(), intervalMs)
+    timer = setInterval(() => {
+      if (!isLoading.value) void refresh()
+    }, intervalMs)
   })
 
   onUnmounted(() => {
