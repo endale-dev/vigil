@@ -43,7 +43,7 @@ func (stub *accountServiceStub) UpdateProfile(_ context.Context, userID domain.I
 	return stub.user, stub.updateProfileError
 }
 
-func (stub *accountServiceStub) UpdateNotifications(_ context.Context, userID domain.ID, settings domain.NotifySettings) (*domain.User, error) {
+func (stub *accountServiceStub) UpdateNotifications(_ context.Context, userID domain.ID, settings domain.NotifySettings, _ string) (*domain.User, error) {
 	stub.updateNotifyCalls++
 	stub.updateNotifyID = userID
 	stub.updateNotify = settings

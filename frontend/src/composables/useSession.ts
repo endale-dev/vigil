@@ -88,6 +88,12 @@ async function logout(): Promise<void> {
   }
 }
 
+function applyNotifications(updated: UserDTO): void {
+  if (currentUser.value?.id === updated.id) {
+    currentUser.value = { ...currentUser.value, notify: updated.notify }
+  }
+}
+
 export function useSession() {
   return {
     user: readonly(currentUser),
@@ -95,6 +101,7 @@ export function useSession() {
     isReady: readonly(sessionReady),
     initialize,
     refresh,
+    applyNotifications,
     login,
     register,
     logout,

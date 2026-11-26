@@ -17,6 +17,7 @@ import (
 const telegramAPIEndpoint = "https://api.telegram.org"
 
 type TelegramNotifier struct {
+	links    telegramLinks
 	botToken string
 	endpoint string
 	client   *http.Client

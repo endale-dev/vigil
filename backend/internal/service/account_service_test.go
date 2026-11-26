@@ -24,7 +24,7 @@ func TestAccountServiceUpdatesNotifications(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := domain.NotifySettings{EmailAlerts: true, TelegramChatID: "-123456"}
-	updated, err := account.UpdateNotifications(context.Background(), "user-1", want)
+	updated, err := account.UpdateNotifications(context.Background(), "user-1", want, "")
 	if err != nil {
 		t.Fatalf("UpdateNotifications() error = %v", err)
 	}
@@ -46,7 +46,7 @@ func TestAccountServiceValidatesEmailDestination(t *testing.T) {
 	}
 	ctx := context.Background()
 	notify := domain.NotifySettings{EmailAlerts: true, EmailDestination: "  ops@example.test  ", TelegramChatID: "12345", TelegramDisabled: true}
-	user, err := account.UpdateNotifications(ctx, "user-1", notify)
+	user, err := account.UpdateNotifications(ctx, "user-1", notify, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,13 +54,13 @@ func TestAccountServiceValidatesEmailDestination(t *testing.T) {
 		t.Fatalf("unexpected user settings: %+v", user)
 	}
 	notify.EmailDestination = "ops@example.test,other@example.test"
-	_, err = account.UpdateNotifications(ctx, "user-1", notify)
+	_, err = account.UpdateNotifications(ctx, "user-1", notify, "")
 	var invalid apperrors.ValidationError
 	if !errors.As(err, &invalid) || invalid.Field != "emailDestination" || users.stored["user-1"].Notify.EmailDestination != "ops@example.test" {
 		t.Fatalf("invalid destination update = %v, saved settings = %+v", err, users.stored["user-1"].Notify)
 	}
 	notify.EmailDestination = ""
-	user, err = account.UpdateNotifications(ctx, "user-1", notify)
+	user, err = account.UpdateNotifications(ctx, "user-1", notify, "")
 	if err != nil || user.Notify.EmailDestination != "" {
 		t.Fatalf("clear destination = %+v, %v", user, err)
 	}
@@ -94,7 +94,7 @@ func TestAccountServiceValidatesAndGatesTelegramChatID(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{TelegramChatID: chatID}); err == nil {
+		if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{TelegramChatID: chatID}, ""); err == nil {
 			t.Errorf("UpdateNotifications(chatID=%q) succeeded", chatID)
 		}
 		if users.stored["user-1"].Notify.TelegramChatID != "" {
@@ -106,10 +106,10 @@ func TestAccountServiceValidatesAndGatesTelegramChatID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{TelegramChatID: "12345"}); err != apperrors.ErrProviderDisabled {
+	if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{TelegramChatID: "12345"}, ""); err != apperrors.ErrProviderDisabled {
 		t.Fatalf("UpdateNotifications() error = %v, want ErrProviderDisabled", err)
 	}
-	if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{EmailAlerts: true}); err != nil {
+	if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{EmailAlerts: true}, ""); err != nil {
 		t.Fatalf("email-only update with Telegram disabled: %v", err)
 	}
 }
@@ -145,7 +145,7 @@ func TestAccountServicePropagatesRepositoryFailures(t *testing.T) {
 	if _, err := account.UpdateStatusSlug(context.Background(), "user-1", "new-status"); !errors.Is(err, want) {
 		t.Fatalf("UpdateStatusSlug() error = %v, want %v", err, want)
 	}
-	if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{EmailAlerts: true}); !errors.Is(err, want) {
+	if _, err := account.UpdateNotifications(context.Background(), "user-1", domain.NotifySettings{EmailAlerts: true}, ""); !errors.Is(err, want) {
 		t.Fatalf("UpdateNotifications() error = %v, want %v", err, want)
 	}
 }

@@ -1,87 +1,142 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ApiError } from '../api/client'
+import { computed, nextTick, ref } from 'vue'
+import { Copy, Mail, Pencil, Send } from '@lucide/vue'
 import { sendTestAlert, updateNotifications } from '../api/account'
-import type { NotificationChannel } from '../api/types'
+import { ApiError } from '../api/client'
+import type { NotificationChannel, NotifyDTO } from '../api/types'
 import FormField from '../components/FormField.vue'
+import LoadingStatus from '../components/LoadingStatus.vue'
 import WorkspaceShell from '../components/WorkspaceShell.vue'
 import { useSession } from '../composables/useSession'
 
 const session = useSession()
 const user = session.user
-const emailAlerts = ref(false)
-const emailDestination = ref('')
-const telegramAlerts = ref(false)
-const telegramChatId = ref('')
-const saving = ref(false)
-const testing = ref<NotificationChannel | null>(null)
-const saveError = ref('')
-const emailError = ref('')
-const telegramError = ref('')
-const savedMessage = ref('')
-const testResult = ref<{ channel: NotificationChannel; message: string; failed: boolean } | null>(null)
+const channels = [
+  { id: 'email', name: 'Email', icon: Mail },
+  { id: 'telegram', name: 'Telegram', icon: Send },
+] as const
+const editing = ref<NotificationChannel | null>(null)
+const draft = ref('')
+const fieldError = ref('')
+const startNonce = ref('')
+const startPayload = ref('')
+const personalLink = computed(() => startPayload.value ? officialBot + '?start=' + startPayload.value : '')
+const copyStatus = ref('')
+const telegramPlaceholder = '@yourname or t.me/yourgroup'
+const officialBot = 'https://t.me/VigilMonitorAlertBot'
 
-const savedTelegramEnabled = computed(() => Boolean(user.value?.notify.telegramChatId && !user.value.notify.telegramDisabled))
+function hex(bytes: Uint8Array) {
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
 
-watch(user, (account) => {
-  emailAlerts.value = account?.notify.emailAlerts ?? false
-  emailDestination.value = account?.notify.emailDestination ?? ''
-  telegramAlerts.value = savedTelegramEnabled.value
-  telegramChatId.value = account?.notify.telegramChatId ?? ''
-}, { immediate: true })
+async function preparePersonalLink(owner: string) {
+  startPayload.value = ''
+  copyStatus.value = ''
+  if (!window.crypto?.subtle) return
+  const storageKey = 'vigil.telegram.link.' + owner
+  let nonce = sessionStorage.getItem(storageKey)
+  if (!nonce || !/^[0-9a-f]{32}$/.test(nonce)) {
+    nonce = hex(crypto.getRandomValues(new Uint8Array(16)))
+    sessionStorage.setItem(storageKey, nonce)
+  }
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(owner + ':' + nonce))
+  startNonce.value = nonce
+  startPayload.value = 'vigil_' + hex(new Uint8Array(digest, 0, 16))
+}
 
-const emailChanged = computed(() => emailAlerts.value !== user.value?.notify.emailAlerts
-  || emailDestination.value.trim() !== (user.value?.notify.emailDestination ?? ''))
-const telegramChanged = computed(() => telegramAlerts.value !== savedTelegramEnabled.value
-  || telegramChatId.value.trim() !== user.value?.notify.telegramChatId)
-const hasChanges = computed(() => emailChanged.value || telegramChanged.value)
-const busy = computed(() => saving.value || testing.value !== null)
-
-async function save(): Promise<void> {
-  if (!hasChanges.value || busy.value) return
-  saving.value = true
-  saveError.value = ''
-  emailError.value = ''
-  telegramError.value = ''
-  savedMessage.value = ''
-  testResult.value = null
+async function copyCommand() {
+  const input = document.getElementById('telegram-link-command') as HTMLInputElement | null
+  if (!input) return
   try {
-    const chatId = telegramChatId.value.trim()
-    await updateNotifications({
-      emailAlerts: emailAlerts.value,
-      emailDestination: emailDestination.value.trim(),
-      telegramChatId: chatId,
-      telegramDisabled: Boolean(chatId) && !telegramAlerts.value,
+    await navigator.clipboard.writeText(input.value)
+    copyStatus.value = 'Copied. Send the command in your bot chat.'
+  } catch {
+    input.select()
+    copyStatus.value = 'Command selected. Copy it and send it in your bot chat.'
+  }
+}
+const pending = ref<'save' | 'test' | null>(null)
+const feedback = ref<{ channel: NotificationChannel; text: string; failed?: boolean } | null>(null)
+const hasChat = computed(() => Boolean(user.value?.notify.telegramChatId))
+const canEdit = (id: NotificationChannel) => id === 'email' || user.value?.capabilities.telegram
+function enabled(id: NotificationChannel) {
+  const account = user.value
+  if (!account) return false
+  return id === 'email' ? account.notify.emailAlerts
+    : account.capabilities.telegram && hasChat.value && !account.notify.telegramDisabled
+}
+
+async function edit(id: NotificationChannel) {
+  if (!user.value) return
+  draft.value = id === 'email' ? user.value.notify.emailDestination : user.value.notify.telegramChatId
+  fieldError.value = ''
+  feedback.value = null
+  editing.value = id
+  if (id === 'telegram') await preparePersonalLink(user.value.id)
+  await nextTick()
+  document.getElementById(id + '-destination')?.focus()
+}
+
+async function closeEditor(id: NotificationChannel) {
+  editing.value = null
+  await nextTick()
+  document.getElementById('edit-' + id)?.focus()
+}
+
+async function persist(id: NotificationChannel, patch: Partial<NotifyDTO>, message: string) {
+  if (!user.value || pending.value) return
+  pending.value = 'save'
+  feedback.value = null
+  fieldError.value = ''
+  try {
+    const account = await updateNotifications({
+      ...user.value.notify, ...patch,
+      telegramStartNonce: editing.value === 'telegram' && patch.telegramChatId?.startsWith('@') ? startNonce.value : undefined,
     })
-    await session.refresh()
-    savedMessage.value = 'Alert settings saved.'
-  } catch (error) {
-    if (error instanceof ApiError && error.field === 'emailDestination') {
-      emailError.value = error.message
-    } else if (error instanceof ApiError && error.field === 'telegramChatId') {
-      telegramError.value = error.message
+    session.applyNotifications(account)
+    if (editing.value === 'telegram') sessionStorage.removeItem('vigil.telegram.link.' + account.id)
+    feedback.value = { channel: id, text: message }
+    pending.value = null
+    if (editing.value === id) await closeEditor(id)
+  } catch (err) {
+    if (editing.value === id && err instanceof ApiError && err.status === 422) {
+      fieldError.value = id === 'email' ? 'Enter a valid email address.' : err.message
     } else {
-      saveError.value = error instanceof Error ? error.message : 'Could not save alert settings.'
+      feedback.value = { channel: id, text: 'Could not save your alert settings. Please try again.', failed: true }
     }
   } finally {
-    saving.value = false
+    pending.value = null
   }
 }
 
-async function test(channel: NotificationChannel): Promise<void> {
-  testing.value = channel
-  testResult.value = null
+function saveDestination(id: NotificationChannel) {
+  const value = draft.value.trim()
+  if (id === 'email') return persist(id, { emailDestination: value }, 'Email destination saved.')
+  return persist(id, {
+    telegramChatId: value,
+    telegramDisabled: !value || (hasChat.value && !enabled(id)),
+  }, !value ? 'Chat removed. Telegram alerts are off.' : hasChat.value ? 'Telegram destination saved.' : 'Chat saved. Telegram alerts are on.')
+}
+
+function toggle(id: NotificationChannel) {
+  const on = !enabled(id)
+  return persist(id, id === 'email' ? { emailAlerts: on } : { telegramDisabled: !on },
+    'Alerts turned ' + (on ? 'on.' : 'off.'))
+}
+
+async function test(id: NotificationChannel) {
+  if (pending.value || !enabled(id)) return
+  pending.value = 'test'
+  feedback.value = { channel: id, text: 'Requesting a test alert…' }
   try {
-    await sendTestAlert(channel)
-    testResult.value = { channel, message: 'Test alert requested. Check your destination.', failed: false }
-  } catch (error) {
-    testResult.value = {
-      channel,
-      message: error instanceof Error ? error.message : 'Could not send the test alert.',
-      failed: true,
-    }
+    await sendTestAlert(id)
+    feedback.value = { channel: id, text: 'Test requested. Check your ' + (id === 'email' ? 'inbox.' : 'Telegram chat.') }
+  } catch {
+    feedback.value = { channel: id, failed: true, text: id === 'email'
+      ? 'Could not send the test email. Check the destination and try again.'
+      : 'Could not send the test message. Check the destination and make sure the bot can post in that chat.' }
   } finally {
-    testing.value = null
+    pending.value = null
   }
 }
 </script>
@@ -92,76 +147,106 @@ async function test(channel: NotificationChannel): Promise<void> {
       <header class="console-page-head">
         <div>
           <h1 class="console-title">Alerts</h1>
-          <p class="console-description">Choose where Vigil sends downtime and recovery alerts for your monitors.</p>
+          <p class="console-description">Choose where Vigil sends downtime and recovery alerts.</p>
         </div>
       </header>
-      <p v-if="!user" role="status" class="text-sm text-vigil-muted">Loading alert settings…</p>
-      <form v-else class="console-panel divide-y divide-vigil-rule" @submit.prevent="save">
-        <section class="p-5 sm:p-6" aria-labelledby="email-alerts-title">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="email-alerts-title" class="section-title">Email</h2>
-            <span class="text-sm" :class="user.notify.emailAlerts ? 'text-vigil-up' : 'text-vigil-muted'">
-              {{ user.notify.emailAlerts ? 'Enabled' : 'Off' }}
-            </span>
-          </div>
-          <label class="mt-2 flex min-h-10 items-center gap-2.5 text-sm">
-            <input v-model="emailAlerts" type="checkbox" class="size-4 accent-vigil-brand" :disabled="busy" />
-            Send email alerts
-          </label>
-          <div class="mt-2 max-w-md">
-            <FormField id="alert-email" v-model="emailDestination" type="email" label="Destination email" autocomplete="email"
-              :placeholder="user.email" :hint="`Leave blank to send alerts to your sign-in email (${user.email}).`"
-              :disabled="busy" :error="emailError" @update:model-value="emailError = ''" />
-          </div>
-          <button v-if="user.notify.emailAlerts && !emailChanged" type="button" class="console-button secondary mt-2" :disabled="busy" @click="test('email')">
-            {{ testing === 'email' ? 'Sending…' : 'Send test email' }}
-          </button>
-          <p v-if="testResult?.channel === 'email'" class="mt-2 text-sm" :class="testResult.failed ? 'text-vigil-down' : 'text-vigil-up'" :role="testResult.failed ? 'alert' : 'status'">
-            {{ testResult.message }}
-          </p>
-        </section>
-
-        <section class="p-5 sm:p-6" aria-labelledby="telegram-alerts-title">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="telegram-alerts-title" class="section-title">Telegram</h2>
-            <span class="text-sm" :class="user.capabilities.telegram && savedTelegramEnabled ? 'text-vigil-up' : 'text-vigil-muted'">
-              {{ !user.capabilities.telegram ? 'Unavailable' : savedTelegramEnabled ? 'Enabled' : 'Off' }}
-            </span>
-          </div>
-          <template v-if="user.capabilities.telegram">
-            <p class="mt-2 text-sm text-vigil-muted">
-              Start a chat with your Vigil bot, or add it to the group that should get alerts.
-            </p>
-            <label class="mt-2 flex min-h-10 items-center gap-2.5 text-sm">
-              <input v-model="telegramAlerts" type="checkbox" class="size-4 accent-vigil-brand" :disabled="busy" />
-              Send Telegram alerts
-            </label>
-            <div class="mt-2 max-w-md">
-              <FormField id="telegram-chat-id" v-model="telegramChatId" label="Telegram chat ID" autocomplete="off"
-                hint="Use the numeric chat ID, including the minus sign if present."
-                :required="telegramAlerts" :disabled="busy" :error="telegramError" @update:model-value="telegramError = ''" />
-            </div>
-            <details class="mt-3 text-sm text-vigil-muted">
-              <summary class="w-fit cursor-pointer font-medium text-vigil-brand">Where do I find the chat ID?</summary>
-              <p class="mt-2">Ask the person who configured the bot for the chat ID. If you manage the bot, find <code>message.chat.id</code> in the update for your message.</p>
-              <a class="text-action mt-1 inline-block" href="https://core.telegram.org/bots/api#getting-updates" target="_blank" rel="noopener noreferrer">Telegram’s Bot API guide</a>
-            </details>
-            <button v-if="savedTelegramEnabled && !telegramChanged" type="button" class="console-button secondary mt-3" :disabled="busy" @click="test('telegram')">
-              {{ testing === 'telegram' ? 'Sending…' : 'Send Telegram test' }}
+      <LoadingStatus v-if="!user">Loading alert settings…</LoadingStatus>
+      <div v-else class="grid gap-4">
+        <section v-for="{ id, name, icon } in channels" :key="id" class="console-panel p-5 sm:p-6" :aria-labelledby="id + '-title'">
+          <header class="flex items-center gap-3">
+            <span class="channel-icon"><component :is="icon" :size="19" aria-hidden="true" /></span>
+            <h2 :id="id + '-title'" class="section-title grow">{{ name }}</h2>
+            <button v-if="canEdit(id) && (id === 'email' || hasChat)" type="button" role="switch"
+              class="channel-switch" :aria-label="name + ' alerts'" :aria-checked="enabled(id)"
+              :disabled="!!pending || !!editing" @click="toggle(id)">
+              {{ enabled(id) ? 'On' : 'Off' }} <span aria-hidden="true"></span>
             </button>
-            <p v-if="testResult?.channel === 'telegram'" class="mt-2 text-sm" :class="testResult.failed ? 'text-vigil-down' : 'text-vigil-up'" :role="testResult.failed ? 'alert' : 'status'">
-              {{ testResult.message }}
-            </p>
-          </template>
-          <p v-else class="mt-2 text-sm text-vigil-muted">A server administrator needs to set <code>TELEGRAM_BOT_TOKEN</code> before you can connect a Telegram chat.</p>
+          </header>
+          <div v-if="id === 'telegram' && canEdit(id)" class="mt-4 space-y-2 text-sm text-vigil-muted">
+            <p>Vigil sends alerts through @VigilMonitorAlertBot. <button v-if="!hasChat && !editing" type="button" class="text-action" :disabled="!!pending" @click="edit('telegram')">Connect your chat</button></p>
+            <details class="telegram-guide">
+              <summary>Telegram connection guide</summary>
+              <div class="grid gap-4 pt-3">
+                <section>
+                  <h3>Receive alerts in a personal chat</h3>
+                  <ol>
+                    <li>Choose <strong>Connect your chat</strong>, or use the pencil to change an existing destination.</li>
+                    <li>Choose <strong>Connect with @VigilMonitorAlertBot</strong> and tap <strong>Start</strong> in Telegram. If the chat is already open, you can use <strong>Already started the bot?</strong> in Vigil and send the full copied command there instead.</li>
+                    <li>Return to Vigil and save your own Telegram <code>@username</code> within 15 minutes of sending the command.</li>
+                  </ol>
+                </section>
+                <section>
+                  <h3>Receive alerts in a group</h3>
+                  <ol>
+                    <li>Open the destination editor and choose <strong>Add the bot to your group</strong>. Give it permission to post messages.</li>
+                    <li>For a public group, paste its <code>t.me</code> link. For a private group, enter its numeric chat ID, including the leading minus sign. Save the destination.</li>
+                  </ol>
+                </section>
+                <p>Once Telegram alerts are <strong>On</strong>, select <strong>Send test message</strong> and check the conversation you chose.</p>
+              </div>
+            </details>
+          </div>
+          <p v-if="!canEdit(id)" class="mt-4 text-sm text-vigil-muted">Telegram is unavailable. Ask the server administrator to configure the bot and restart Vigil.</p>
+          <form v-else-if="editing === id" class="channel-editor" @submit.prevent="saveDestination(id)">
+            <FormField :id="id + '-destination'" v-model="draft" :label="id === 'email' ? 'Destination email' : 'Telegram destination'"
+              :type="id === 'email' ? 'email' : 'text'" :autocomplete="id === 'email' ? 'email' : 'off'"
+              :placeholder="id === 'email' ? user.email : telegramPlaceholder"
+              :hint="id === 'email' ? 'Leave blank to use ' + user.email + '.' : 'Use your personal @username, a public group link, or a numeric chat ID.'"
+              :error="fieldError" :required="id === 'telegram' && !hasChat" :disabled="!!pending" @update:model-value="fieldError = ''" />
+            <div v-if="id === 'telegram'" class="grid gap-2 text-sm text-vigil-muted">
+              <template v-if="personalLink">
+                <p><strong>Personal chat.</strong> <a class="text-action" :href="personalLink" target="_blank" rel="noopener noreferrer">Connect with @VigilMonitorAlertBot</a> and tap <strong>Start</strong>. Return here and save your @username within 15 minutes.</p>
+                <details :open="!!fieldError && draft.trim().startsWith('@')">
+                  <summary class="cursor-pointer font-medium text-vigil-brand">Already started the bot?</summary>
+                  <p class="my-2">Send this full command in your existing private chat with @VigilMonitorAlertBot, then save your username again.</p>
+                  <div class="flex items-center gap-2">
+                    <input id="telegram-link-command" :value="'/start ' + startPayload" readonly aria-label="Telegram linking command" class="min-w-0 flex-1 rounded border border-vigil-rule p-2 font-mono text-xs" @focus="($event.target as HTMLInputElement).select()" />
+                    <button type="button" class="console-button secondary" @click="copyCommand"><Copy :size="14" aria-hidden="true" />Copy</button>
+                  </div>
+                  <p v-if="copyStatus" role="status" class="mt-1">{{ copyStatus }}</p>
+                </details>
+              </template>
+              <p v-else><strong>Personal chat.</strong> Use a numeric chat ID or open Vigil over HTTPS to link your username.</p>
+              <p><strong>Group chat.</strong> <a class="text-action" :href="officialBot + '?startgroup=true'" target="_blank" rel="noopener noreferrer">Add the bot to your group</a>, then paste the group’s public t.me link. For a private group, use its numeric chat ID, including the minus sign.</p>
+            </div>
+            <p v-if="id === 'telegram' && hasChat" class="text-xs text-vigil-muted">Clear the field and save to disconnect this chat.</p>
+            <div class="flex flex-wrap gap-2">
+              <button class="console-button primary" type="submit" :disabled="!!pending">{{ pending === 'save' ? 'Saving…' : id === 'telegram' && !hasChat ? 'Save and enable alerts' : 'Save' }}</button>
+              <button class="console-button secondary" type="button" :disabled="!!pending" @click="closeEditor(id)">Cancel</button>
+            </div>
+          </form>
+          <div v-else class="channel-destination">
+            <div class="min-w-0 grow">
+              <p class="text-xs text-vigil-muted">{{ id === 'email' ? 'Destination email' : 'Telegram chat' }}</p>
+              <p class="mt-1 break-all text-sm font-medium">{{ id === 'email' ? user.notify.emailDestination || user.email : user.notify.telegramChatId || 'Choose a chat for alerts' }}</p>
+            </div>
+            <button :id="'edit-' + id" type="button" class="icon-control" :aria-label="'Edit ' + name + ' destination'" :title="'Edit ' + name + ' destination'"
+              :disabled="!!pending || !!editing" @click="edit(id)"><Pencil :size="16" aria-hidden="true" /></button>
+          </div>
+          <button v-if="enabled(id) && editing !== id" class="channel-test" type="button" :disabled="!!pending || !!editing" @click="test(id)">
+            Send test {{ id === 'email' ? 'email' : 'message' }}
+          </button>
+          <p v-if="feedback?.channel === id" class="mt-3 text-sm" :class="feedback.failed ? 'text-vigil-down' : 'text-vigil-up'" :role="feedback.failed ? 'alert' : 'status'">{{ feedback.text }}</p>
         </section>
-
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-3 p-5 sm:px-6 sm:py-4">
-          <button type="submit" class="console-button primary" :disabled="busy || !hasChanges">{{ saving ? 'Saving…' : 'Save alert settings' }}</button>
-          <p v-if="saveError" role="alert" class="text-sm text-vigil-down">{{ saveError }}</p>
-          <p v-else-if="savedMessage && !hasChanges" role="status" class="text-sm text-vigil-up">{{ savedMessage }}</p>
-        </div>
-      </form>
+      </div>
     </div>
   </WorkspaceShell>
 </template>
+
+<style scoped>
+.telegram-guide { border-left: 2px solid var(--color-vigil-rule); padding-left: 12px; }
+.telegram-guide summary { width: fit-content; cursor: pointer; color: var(--color-vigil-brand); font-weight: 550; }
+.telegram-guide h3 { margin-bottom: 4px; color: var(--color-vigil-ink); font-weight: 600; }
+.telegram-guide ol { display: grid; gap: 4px; padding-left: 1.4em; list-style: decimal; }
+.channel-icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 6px; color: var(--color-vigil-brand); background: var(--color-vigil-brand-soft); }
+.channel-destination,.channel-editor { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-vigil-rule); }
+.channel-destination { display: flex; align-items: center; gap: 12px; }
+.channel-editor { display: grid; gap: 14px; }
+.channel-switch,.channel-test { display: inline-flex; align-items: center; min-height: 36px; font-size: 13px; font-weight: 550; }
+.channel-test { margin-top: 8px; color: var(--color-vigil-brand); }
+.channel-test:hover { text-decoration: underline; }
+.channel-switch { gap: 8px; }
+.channel-switch span { display: inline-flex; align-items: center; width: 34px; height: 20px; padding: 3px; border-radius: 20px; background: #69766e; }
+.channel-switch span::after { content: ''; width: 14px; height: 14px; border-radius: 50%; background: white; }
+.channel-switch[aria-checked=true] span { justify-content: flex-end; background: var(--color-vigil-brand); }
+</style>

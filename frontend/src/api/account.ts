@@ -1,7 +1,7 @@
 import { apiRequest } from './client'
 import type { NotificationChannel, NotifyDTO, UserDTO } from './types'
 
-export function updateNotifications(input: NotifyDTO): Promise<UserDTO> {
+export function updateNotifications(input: NotifyDTO & { telegramStartNonce?: string }): Promise<UserDTO> {
   return apiRequest<UserDTO>('/api/me/notifications', {
     method: 'PUT',
     body: JSON.stringify(input),

@@ -49,7 +49,7 @@ func (account *AccountService) UpdateProfile(ctx context.Context, userID domain.
 	return user, nil
 }
 
-func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings) (*domain.User, error) {
+func (account *AccountService) UpdateNotifications(ctx context.Context, userID domain.ID, notify domain.NotifySettings, startNonce string) (*domain.User, error) {
 	notify.EmailDestination = strings.TrimSpace(notify.EmailDestination)
 	if notify.EmailDestination != "" && domain.ValidateEmail(notify.EmailDestination) != nil {
 		return nil, apperrors.ValidationError{Field: "emailDestination", Message: "Enter a valid email address."}
@@ -63,7 +63,17 @@ func (account *AccountService) UpdateNotifications(ctx context.Context, userID d
 			return nil, apperrors.ErrProviderDisabled
 		}
 		if !validTelegramChatID(notify.TelegramChatID) {
-			return nil, apperrors.ValidationError{Field: "telegramChatId", Message: "must be empty or a 5 to 20 digit chat ID"}
+			resolver, ok := account.notifiers[domain.ChannelTelegram].(interface {
+				ResolveDestination(context.Context, domain.ID, string, string) (string, error)
+			})
+			if !ok {
+				return nil, apperrors.ValidationError{Field: "telegramChatId", Message: "Enter a numeric chat ID, a personal @username or a public group link."}
+			}
+			chatID, err := resolver.ResolveDestination(ctx, userID, notify.TelegramChatID, startNonce)
+			if err != nil {
+				return nil, err
+			}
+			notify.TelegramChatID = chatID
 		}
 	}
 	user.Notify = notify

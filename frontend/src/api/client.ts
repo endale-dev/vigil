@@ -61,14 +61,16 @@ export async function apiRequest<T>(
     return undefined as T
   }
 
-  const body = await response.text()
+  const body = await response.text().catch(() => {
+    throw new ApiError(0, 'The connection was interrupted. Please try again.')
+  })
   let payload: unknown
   if (body.trim() !== '') {
     try {
       payload = JSON.parse(body) as unknown
     } catch {
       if (response.ok) {
-        throw new ApiError(response.status, 'The server returned an invalid response.')
+        throw new ApiError(response.status, 'Vigil could not complete this request. Please try again.')
       }
       payload = undefined
     }
@@ -78,19 +80,28 @@ export async function apiRequest<T>(
     if (response.status === 401 && options.authenticated) {
       handleUnauthorized()
     }
-    const error = asErrorDTO(payload)
-    throw new ApiError(
-      response.status,
-      error?.error ?? (body.trim() || `Request failed with status ${response.status}.`),
-      error?.field,
-    )
+    throw publicError(response.status, asErrorDTO(payload))
   }
 
   if (payload === undefined) {
-    throw new ApiError(response.status, 'The server returned an empty response.')
+    throw new ApiError(response.status, 'Vigil could not complete this request. Please try again.')
   }
 
   return payload as T
+}
+
+function publicError(status: number, detail?: ErrorDTO): ApiError {
+  if (status === 422 && detail?.field) return new ApiError(status, detail.error, detail.field)
+  const messages: Record<number, string> = {
+    400: 'Check your entries and try again.',
+    401: detail?.error === 'invalid credentials' ? 'Check your email and password.' : 'Please sign in again.',
+    403: detail?.error === 'limit reached' ? 'You have reached your monitor limit.' : 'You do not have permission to do that.',
+    404: 'This item is unavailable.',
+    409: detail?.error === 'email already taken' ? 'This email is already registered.' : 'This value is already in use.',
+    413: 'This request is too large. Shorten your entry and try again.',
+    429: 'Please wait a moment before trying again.',
+  }
+  return new ApiError(status, messages[status] ?? 'Vigil could not complete this request. Please try again.')
 }
 
 function handleUnauthorized(): void {

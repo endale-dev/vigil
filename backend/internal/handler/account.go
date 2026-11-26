@@ -16,7 +16,7 @@ type sessionAuthenticator interface {
 
 type accountService interface {
 	UpdateProfile(context.Context, domain.ID, string) (*domain.User, error)
-	UpdateNotifications(context.Context, domain.ID, domain.NotifySettings) (*domain.User, error)
+	UpdateNotifications(context.Context, domain.ID, domain.NotifySettings, string) (*domain.User, error)
 	UpdateStatusSlug(context.Context, domain.ID, string) (*domain.User, error)
 	SendTestAlert(context.Context, domain.ID, domain.Channel) error
 }
@@ -37,10 +37,11 @@ type profileRequest struct {
 }
 
 type notificationsRequest struct {
-	EmailAlerts      bool    `json:"emailAlerts"`
-	EmailDestination *string `json:"emailDestination"`
-	TelegramChatID   string  `json:"telegramChatId"`
-	TelegramDisabled *bool   `json:"telegramDisabled"`
+	TelegramStartNonce string  `json:"telegramStartNonce"`
+	EmailAlerts        bool    `json:"emailAlerts"`
+	EmailDestination   *string `json:"emailDestination"`
+	TelegramChatID     string  `json:"telegramChatId"`
+	TelegramDisabled   *bool   `json:"telegramDisabled"`
 }
 
 func NewAccountHandler(authentication sessionAuthenticator, account accountService, capabilities CapabilitiesDTO, logger *slog.Logger) (*AccountHandler, error) {
@@ -69,7 +70,7 @@ func (handler *AccountHandler) UpdateNotifications(writer http.ResponseWriter, r
 	if input.TelegramDisabled != nil {
 		notify.TelegramDisabled = *input.TelegramDisabled
 	}
-	user, err := handler.account.UpdateNotifications(request.Context(), session.User.ID, notify)
+	user, err := handler.account.UpdateNotifications(request.Context(), session.User.ID, notify, input.TelegramStartNonce)
 	if err != nil {
 		handler.writeError(writer, err)
 		return
